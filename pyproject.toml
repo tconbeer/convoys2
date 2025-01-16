@@ -1,0 +1,70 @@
+[project]
+name = "convoys2"
+version = "0.2.0"
+description = "Implementation of statistical models to analyze time lagged conversions"
+readme = "README.md"
+authors = [
+    { name = "Erik Bernhardsson", email = "erikbern@better.com"},
+    { name = "Ted Conbeer", email = "tconbeer@users.noreply.github.com" }
+]
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    'autograd',
+    'autograd-gamma>=0.2.0',
+    'deprecated',
+    'emcee>=3.0.0',
+    'matplotlib>=2.0.0',
+    'pandas>=0.24.0',
+    'progressbar2>=3.46.1',
+    'numpy',
+    'scipy',
+]
+[dependency-groups]
+test = [
+  "pytest"
+]
+lint = [
+  "ruff",
+  "mypy"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["A", "B", "E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "src/**/*.py",
+    "tests/**/*.py",
+]
+mypy_path = "stubs"
+
+show_column_numbers = true
+
+# show error messages from unrelated files
+follow_imports = "normal"
+
+# be strict
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+strict_optional = true
+
+warn_return_any = true
+warn_no_return = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+
+no_implicit_reexport = true
+strict_equality = true
