@@ -7,7 +7,7 @@ import matplotlib
 import numpy
 import pandas
 import pytest
-import scipy.stats
+import scipy.stats  # type: ignore[import-untyped]
 from numpy.typing import ArrayLike
 
 matplotlib.use("Agg")  # Needed for matplotlib to run in Travis
@@ -90,7 +90,7 @@ def test_output_shapes(
     assert model.predict([X[0], X[1]], [0, 1]).shape == (2,)
 
 
-@flaky.flaky  # type: ignore[misc]
+@flaky.flaky
 def test_exponential_regression_model(
     c: float = 0.3, lambd: float = 0.1, n: int = 10000
 ) -> None:

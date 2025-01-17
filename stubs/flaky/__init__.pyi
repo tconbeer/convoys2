@@ -1,1 +1,3 @@
-__all__ = "flaky"
+from .flaky import flaky
+
+__all__ = ["flaky"]

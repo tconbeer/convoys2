@@ -1,5 +1,5 @@
-from types import TracebackType, TypeVar
-from typing import Callable, Protocol
+from types import TracebackType
+from typing import Callable, Protocol, TypeVar
 
 from .flaky_pytest_plugin import FlakyPlugin
 

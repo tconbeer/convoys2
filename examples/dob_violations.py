@@ -29,9 +29,16 @@ def run() -> None:
         print("plotting", model)
         pyplot.figure(figsize=(9, 6))
         convoys.plotting.plot_cohorts(
-            G, B, T, model=model, ci=0.95, groups=groups, t_max=30
+            G,
+            B,
+            T,
+            model=model,  # type: ignore[arg-type]
+            ci=0.95,
+            groups=groups,
+            t_max=30,
         )
         pyplot.legend()
+        assert unit is not None
         pyplot.xlabel(unit)
         pyplot.savefig("dob-violations-%s.png" % model)
 
@@ -60,6 +67,7 @@ def run() -> None:
         plot_kwargs={"linestyle": "--"},
     )
     pyplot.legend()
+    assert unit is not None
     pyplot.xlabel(unit)
     pyplot.savefig("dob-violations-combined.png")
 

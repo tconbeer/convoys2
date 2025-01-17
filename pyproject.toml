@@ -45,7 +45,8 @@ select = ["A", "B", "E", "F", "I"]
 python_version = "3.12"
 files = [
     "src/**/*.py",
-    # "tests/**/*.py",
+    "tests/**/*.py",
+    "examples/**/*.py",
 ]
 mypy_path = "stubs"
 
