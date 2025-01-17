@@ -1,6 +1,6 @@
 .PHONY: lint
 
 lint:
-	ruff format .
-	ruff check --fix .
-	mypy
+	uv run ruff format .
+	uv run ruff check --fix .
+	uv run mypy
