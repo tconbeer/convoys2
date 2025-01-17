@@ -1,6 +1,7 @@
 import datetime
 import random
 from typing import Literal
+from pathlib import Path
 
 import flaky
 import matplotlib
@@ -17,6 +18,7 @@ import convoys.plotting
 import convoys.regression
 import convoys.single
 import convoys.utils
+
 
 
 def sample_weibull(k: float, lambd: float) -> float:
@@ -390,10 +392,13 @@ def _test_plot_cohorts(
         convoys.plotting.plot_cohorts(
             G, B, T, model=extra_model, plot_kwargs=dict(linestyle="--", alpha=0.1)
         )
+    here = Path(__file__)
+    results_dir = here.parent / "results"
+    results_dir.mkdir(exist_ok=True)
     matplotlib.pyplot.savefig(
-        "%s-%s.png" % (model, extra_model)
+        results_dir / f"{model}-{extra_model}.png"
         if extra_model is not None
-        else "%s.png" % model
+        else results_dir / f"{model}.png"
     )
 
 
@@ -438,16 +443,23 @@ def test_plot_cohorts_subplots() -> None:
     for ax in axes.flatten():
         convoys.plotting.plot_cohorts(G, B, T, groups=groups, ax=ax)
         ax.legend()
-    matplotlib.pyplot.savefig("subplots.png")
+    here = Path(__file__)
+    matplotlib.pyplot.savefig(here.parent/"results"/"subplots.png")
+
+@pytest.fixture
+def add_examples_to_path() -> None:
+    import sys
+    root = Path(__file__).parent.parent
+    sys.path.append(str(root/"examples"))
 
 
-def test_marriage_example() -> None:
-    from examples.marriage import run
+def test_marriage_example(add_examples_to_path: None) -> None:
+    from marriage import run
 
     run()
 
 
-def test_dob_violations_example() -> None:
-    from examples.dob_violations import run
+def test_dob_violations_example(add_examples_to_path: None) -> None:
+    from dob_violations import run
 
     run()

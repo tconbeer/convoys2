@@ -2,9 +2,12 @@ import datetime
 
 import pandas
 from matplotlib import pyplot
+from pathlib import Path
 
 import convoys.plotting
 import convoys.utils
+
+here = Path(__file__)
 
 
 def run() -> None:
@@ -40,7 +43,8 @@ def run() -> None:
         pyplot.legend()
         assert unit is not None
         pyplot.xlabel(unit)
-        pyplot.savefig("dob-violations-%s.png" % model)
+        fig_path = here.parent / f"dob-violations-{model}.png"
+        pyplot.savefig(fig_path)
 
     pyplot.figure(figsize=(9, 6))
     df["bucket"] = df["issue_date"].apply(
@@ -69,7 +73,8 @@ def run() -> None:
     pyplot.legend()
     assert unit is not None
     pyplot.xlabel(unit)
-    pyplot.savefig("dob-violations-combined.png")
+    fig_path = here.parent / "dob-violations-combined.png"
+    pyplot.savefig(fig_path)
 
 
 if __name__ == "__main__":

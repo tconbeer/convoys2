@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Convoys &#8212; Convoys  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="convoys">
+<h1>Convoys<a class="headerlink" href="#convoys" title="Link to this heading">¶</a></h1>
+<p>Convoys is a simple library that fits a few statistical model useful for modeling time-lagged conversion rates.
+You can check out the <a class="reference external" href="https://github.com/better/convoys">Github repo</a> for source code and more things!</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
+<p>The easiest way to install is from PyPI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">convoys</span>
+</pre></div>
+</div>
+</section>
+<section id="background">
+<h2>Background<a class="headerlink" href="#background" title="Link to this heading">¶</a></h2>
+<p>Predicting conversions is a really important problem for ecommerce, online advertising, and many other applications.
+In many cases when conversions are relatively quick, you can measure the response (e.g. whether the user bought the product) and use models like <a class="reference external" href="https://en.wikipedia.org/wiki/Logistic_regression">logistic regression</a> to predict conversion.</p>
+<p>If conversions have substantial time lag (which is often the case) it gets a bit trickier.
+You know who converted, but if someone did not convert, they might still convert in the future.
+In other words, conversions are observed, but non-conversions are not observed.</p>
+<p>The “hacky” way to address this is to define conversion as <em>conversion at time X</em>.
+This turns the problem into a simple binary classification problem, but the drawback is you are losing data by <em>binarizing</em> it.
+First of all, you can not learn from users that are younger than X.
+You also can not learn from users that convert <em>after</em> X.
+For an excellent introduction to this problem (and distributions like the <a class="reference external" href="https://en.wikipedia.org/wiki/Weibull_distribution">Weibull distribution</a>), here’s a blog post about <a class="reference external" href="https://ragulpr.github.io/2016/12/22/WTTE-RNN-Hackless-churn-modeling/">implementing a recurrent neural network to predict churn</a>.</p>
+</section>
+<section id="survival-analysis-saves-the-day">
+<h2>Survival analysis saves the day<a class="headerlink" href="#survival-analysis-saves-the-day" title="Link to this heading">¶</a></h2>
+<p>Luckily, there is a somewhat similar field called <a class="reference external" href="https://en.wikipedia.org/wiki/Survival_analysis">survival analysis</a>.
+It introduces the concept of <em>censored data</em>, which is data that we have not observed yet.
+<a class="reference external" href="http://lifelines.readthedocs.io/en/latest/">Lifelines</a> is a great Python package with excellent documentation that implements many classic models for survival analysis.</p>
+<p>Unfortunately, fitting a distribution such as Weibull is not enough in the case of conversion rates, since not everyone converts in the end.
+Typically conversion rates stabilize at some fraction eventually.
+For that reason, we have to make the model a bit more complex and introduce the possibility that some items may never convert.</p>
+</section>
+<section id="predicting-lagged-conversions">
+<h2>Predicting lagged conversions<a class="headerlink" href="#predicting-lagged-conversions" title="Link to this heading">¶</a></h2>
+<p>It turns out we can model conversions by essentially thinking of conversions as a logistic regression model <em>multiplied by</em> a distribution over time which is usually a <a class="reference external" href="https://en.wikipedia.org/wiki/Weibull_distribution">Weibull distribution</a> or something similar.
+Convoys implements a few of these models with some utility functions for data conversion and plotting.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Convoys</a></h1>
+
+
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=better&repo=convoys&type=star&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+    
+
+<p>
+<a class="badge" href="https://travis-ci.org/better/convoys">
+    <img
+        alt="https://secure.travis-ci.org/better/convoys.svg?branch=master"
+        src="https://secure.travis-ci.org/better/convoys.svg?branch=master"
+    />
+</a>
+</p>
+
+
+
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Convoys</a><ul>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#background">Background</a></li>
+<li><a class="reference internal" href="#survival-analysis-saves-the-day">Survival analysis saves the day</a></li>
+<li><a class="reference internal" href="#predicting-lagged-conversions">Predicting lagged conversions</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2018, Erik Bernhardsson.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/introduction.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+    <script>
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-64912988-4']);
+      _gaq.push(['_setDomainName', 'none']);
+      _gaq.push(['_setAllowLinker', true]);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'https://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    
+  </body>
+</html>

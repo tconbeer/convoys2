@@ -9,12 +9,12 @@ if TYPE_CHECKING:
     from numpy import ndarray
     from numpy.typing import ArrayLike
 
-    T_Group = TypeVar("T_Group", ArrayLike, Hashable)
+T_Group = TypeVar("T_Group", "ArrayLike", Hashable)
 
 __all__ = ["KaplanMeier", "Exponential", "Weibull", "Gamma", "GeneralizedGamma"]
 
 
-class MultiModel(ABC, Generic["T_Group"]):
+class MultiModel(ABC, Generic[T_Group]):
     _base_model_cls: type[regression.RegressionModel | single.SingleModel]
 
     @abstractmethod
@@ -22,11 +22,11 @@ class MultiModel(ABC, Generic["T_Group"]):
         raise NotImplementedError("Need to implement fit")
 
     @abstractmethod
-    def predict(self, group: "T_Group", t: "ArrayLike") -> "ndarray":
+    def predict(self, group: T_Group, t: "ArrayLike") -> "ndarray":
         raise NotImplementedError("Need to implement predict")
 
     @abstractmethod
-    def predict_ci(self, group: "T_Group", t: "ArrayLike", ci: float) -> "ndarray":
+    def predict_ci(self, group: T_Group, t: "ArrayLike", ci: float) -> "ndarray":
         raise NotImplementedError("Need to implement predict_ci")
 
 

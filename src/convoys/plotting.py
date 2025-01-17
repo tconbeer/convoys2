@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Hashable, Literal
 
 import numpy
@@ -30,7 +31,7 @@ def plot_cohorts(
     ]
     | convoys.multi.MultiModel = "kaplan-meier",
     ci: float | None = None,
-    ax: Axes | None = None,
+    ax: "Axes" | None = None,
     plot_kwargs: dict[str, Any] | None = None,
     plot_ci_kwargs: dict[str, Any] | None = None,
     groups: list[Hashable] | None = None,

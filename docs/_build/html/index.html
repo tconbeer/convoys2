@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Convoys &#8212; Convoys  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="convoys">
+<h1>Convoys<a class="headerlink" href="#convoys" title="Link to this heading">¶</a></h1>
+<p>Convoys is a simple library that fits a few statistical model useful for modeling time-lagged conversion rates.
+You can check out the <a class="reference external" href="https://github.com/better/convoys">Github repo</a> for source code and more things!</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
+<p>The easiest way to install is from PyPI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">convoys</span>
+</pre></div>
+</div>
+</section>
+<section id="background">
+<h2>Background<a class="headerlink" href="#background" title="Link to this heading">¶</a></h2>
+<p>Predicting conversions is a really important problem for ecommerce, online advertising, and many other applications.
+In many cases when conversions are relatively quick, you can measure the response (e.g. whether the user bought the product) and use models like <a class="reference external" href="https://en.wikipedia.org/wiki/Logistic_regression">logistic regression</a> to predict conversion.</p>
+<p>If conversions have substantial time lag (which is often the case) it gets a bit trickier.
+You know who converted, but if someone did not convert, they might still convert in the future.
+In other words, conversions are observed, but non-conversions are not observed.</p>
+<p>The “hacky” way to address this is to define conversion as <em>conversion at time X</em>.
+This turns the problem into a simple binary classification problem, but the drawback is you are losing data by <em>binarizing</em> it.
+First of all, you can not learn from users that are younger than X.
+You also can not learn from users that convert <em>after</em> X.
+For an excellent introduction to this problem (and distributions like the <a class="reference external" href="https://en.wikipedia.org/wiki/Weibull_distribution">Weibull distribution</a>), here’s a blog post about <a class="reference external" href="https://ragulpr.github.io/2016/12/22/WTTE-RNN-Hackless-churn-modeling/">implementing a recurrent neural network to predict churn</a>.</p>
+</section>
+<section id="survival-analysis-saves-the-day">
+<h2>Survival analysis saves the day<a class="headerlink" href="#survival-analysis-saves-the-day" title="Link to this heading">¶</a></h2>
+<p>Luckily, there is a somewhat similar field called <a class="reference external" href="https://en.wikipedia.org/wiki/Survival_analysis">survival analysis</a>.
+It introduces the concept of <em>censored data</em>, which is data that we have not observed yet.
+<a class="reference external" href="http://lifelines.readthedocs.io/en/latest/">Lifelines</a> is a great Python package with excellent documentation that implements many classic models for survival analysis.</p>
+<p>Unfortunately, fitting a distribution such as Weibull is not enough in the case of conversion rates, since not everyone converts in the end.
+Typically conversion rates stabilize at some fraction eventually.
+For that reason, we have to make the model a bit more complex and introduce the possibility that some items may never convert.</p>
+</section>
+<section id="predicting-lagged-conversions">
+<h2>Predicting lagged conversions<a class="headerlink" href="#predicting-lagged-conversions" title="Link to this heading">¶</a></h2>
+<p>It turns out we can model conversions by essentially thinking of conversions as a logistic regression model <em>multiplied by</em> a distribution over time which is usually a <a class="reference external" href="https://en.wikipedia.org/wiki/Weibull_distribution">Weibull distribution</a> or something similar.
+Convoys implements a few of these models with some utility functions for data conversion and plotting.</p>
+</section>
+</section>
+<section id="examples">
+<h1>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h1>
+<p>The main use case for something like Convoys is definitely for online advertising, ecommerce, or similar applications.
+However, there are several places these models can be useful, which we will illustrate with some very different types of datasets.</p>
+<section id="example-1-nyc-department-of-buildings-violations">
+<h2>Example 1: NYC Department of Buildings violations<a class="headerlink" href="#example-1-nyc-department-of-buildings-violations" title="Link to this heading">¶</a></h2>
+<p>We are going to look at complaints received by the Department of Buildings in NYC.
+The dataset is <a class="reference external" href="https://data.cityofnewyork.us/Housing-Development/DOB-Complaints-Received/eabe-havv">available here</a>.</p>
+<p>First, lets load it. There is a <a class="reference external" href="https://pandas.pydata.org/">pandas</a> DataFrame in the examples/ directory that contains a subsampl of the full dataset (10,000 rows out of the 1.3M rows).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_pickle</span><span class="p">(</span><span class="s1">&#39;examples/dob_violations.pickle&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We are going to look at time delay from issue to disposition (when the case was finally resolved, or closed).
+The next step is to convert it to numpy arrays so that we can work with it.
+Convoys comes with a utility function <a class="reference internal" href="#convoys.utils.get_arrays" title="convoys.utils.get_arrays"><code class="xref py py-func docutils literal notranslate"><span class="pre">convoys.utils.get_arrays()</span></code></a> that handles the conversion for you.
+Several of the arguments are references to columns in the dataframe, in this case <em>type</em>, <em>issue_date</em>, and <em>disposition_date</em>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">unit</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span> <span class="o">=</span> <span class="n">convoys</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">get_arrays</span><span class="p">(</span>
+    <span class="n">df</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="s1">&#39;type&#39;</span><span class="p">,</span> <span class="n">created</span><span class="o">=</span><span class="s1">&#39;issue_date&#39;</span><span class="p">,</span> <span class="n">converted</span><span class="o">=</span><span class="s1">&#39;disposition_date&#39;</span><span class="p">,</span>
+    <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;years&#39;</span><span class="p">,</span> <span class="n">group_min_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This will create three numpy arrays that we can use to plot.
+Let’s start with a nonparametric <a class="reference internal" href="#convoys.single.KaplanMeier" title="convoys.single.KaplanMeier"><code class="xref py py-class docutils literal notranslate"><span class="pre">Kaplan-Meier</span></code></a> estimator and plot it using the <a class="reference internal" href="#convoys.plotting.plot_cohorts" title="convoys.plotting.plot_cohorts"><code class="xref py py-func docutils literal notranslate"><span class="pre">convoys.plotting.plot_cohorts()</span></code></a> function.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">convoys</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_cohorts</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s1">&#39;kaplan-meier&#39;</span><span class="p">,</span> <span class="n">ci</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">)</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This should show something similar to this:</p>
+<img alt="_images/dob-violations-kaplan-meier.png" src="_images/dob-violations-kaplan-meier.png" />
+<p>The fact that some complaints take 30 years to resolve is pretty baffling.
+I have no idea why it’s so bad!</p>
+<p>Anyway, let’s fit a <a class="reference internal" href="#convoys.regression.Weibull" title="convoys.regression.Weibull"><code class="xref py py-class docutils literal notranslate"><span class="pre">Weibull</span></code></a> distribution.
+This is a <em>parametric</em> model, meaning it will fit a mathematical model with a few unknowns by finding the values of those unknowns that optimizes the fit.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">convoys</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_cohorts</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s1">&#39;weibull&#39;</span><span class="p">,</span> <span class="n">ci</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">)</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This should show something similar to this:</p>
+<img alt="_images/dob-violations-weibull.png" src="_images/dob-violations-weibull.png" />
+<p>As you can see, the Weibull distribution fits the nonparametric plot fairly well!</p>
+<p>One of the benefits of parametric models is that you can extrapolate them to see the final conversion rate.
+Let’s try to fit the Weibull model to see how different cohorts of reported violations are cleared.
+Let’s also plot the Kaplan-Meier and the Weibull model on top of each other so that we can compare visually how well the model fits.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;bucket&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;issue_date&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">d</span><span class="p">:</span> <span class="s1">&#39;</span><span class="si">%d</span><span class="s1">-</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="mi">5</span><span class="o">*</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">year</span><span class="o">//</span><span class="mi">5</span><span class="p">),</span> <span class="mi">5</span><span class="o">*</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">year</span><span class="o">//</span><span class="mi">5</span><span class="p">)</span><span class="o">+</span><span class="mi">4</span><span class="p">))</span>
+<span class="n">unit</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span> <span class="o">=</span> <span class="n">convoys</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">get_arrays</span><span class="p">(</span>
+    <span class="n">df</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="s1">&#39;bucket&#39;</span><span class="p">,</span> <span class="n">created</span><span class="o">=</span><span class="s1">&#39;issue_date&#39;</span><span class="p">,</span> <span class="n">converted</span><span class="o">=</span><span class="s1">&#39;disposition_date&#39;</span><span class="p">,</span>
+    <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;years&#39;</span><span class="p">,</span> <span class="n">group_min_size</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
+<span class="n">convoys</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_cohorts</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s1">&#39;kaplan-meier&#39;</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">,</span> <span class="n">t_max</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<span class="n">convoys</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_cohorts</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s1">&#39;weibull&#39;</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">,</span> <span class="n">t_max</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">plot_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;linestyle&#39;</span><span class="p">:</span> <span class="s1">&#39;--&#39;</span><span class="p">},</span> <span class="n">ci</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This will show something like this:</p>
+<img alt="_images/dob-violations-combined.png" src="_images/dob-violations-combined.png" />
+<p>The dashed lines are the Kaplan-Meier curves, whereas the solid ones with the shaded area are the Weibull model (with corresponding uncertainty intervals).
+They match really well!</p>
+<p>It looks like disposition has gotten consistently faster over the years, which is good to see.
+The weird vertical jumps in Kaplan-Meier is just an artifact of how the model is fit, where the last observation ends up being drawn in a funny way.</p>
+</section>
+<section id="example-2-age-of-marriage">
+<h2>Example 2: Age of marriage<a class="headerlink" href="#example-2-age-of-marriage" title="Link to this heading">¶</a></h2>
+<p>This example looks at time until marriage.
+Since not everyone marries, it’s a great example where <a class="reference external" href="https://en.wikipedia.org/wiki/Survival_analysis">survival analysis</a> would not be correct
+(although <em>most</em> people marry, so the difference isn’t that huge).</p>
+<p>There’s a dataset in the repo that contains year born, year married, and a number of attributes for a random sample of a few hundred thousand Americans.
+The data is included as a Pandas dataframe.</p>
+<p>Let’s fit a <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">generalized</span> <span class="pre">Gamma</span> <span class="pre">distribution</span></code></a>!
+Why that distribution?
+Unlike the previous example, we expect some kind of time lag before the first conversion even start to happen.
+A Gamma distribution is a sum of <em>k</em> exponentials, which can be interpreted as various life phases a person goes through (newborn, toddler, etc).</p>
+<p>A <em>generalized</em> Gamma distribution adds another paramter <em>p</em> which makes each exponential into a Weibull.
+This just gives one more degree of freedom to fit the model.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_pickle</span><span class="p">(</span><span class="s1">&#39;examples/marriage.pickle&#39;</span><span class="p">)</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span> <span class="o">=</span> <span class="n">convoys</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">get_arrays</span><span class="p">(</span>
+    <span class="n">df</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="s1">&#39;sex&#39;</span><span class="p">,</span> <span class="n">created</span><span class="o">=</span><span class="s1">&#39;born&#39;</span><span class="p">,</span> <span class="n">converted</span><span class="o">=</span><span class="s1">&#39;married&#39;</span><span class="p">)</span>
+
+<span class="n">pyplot</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">9</span><span class="p">))</span>
+<span class="n">convoys</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_cohorts</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s1">&#39;generalized-gamma&#39;</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">)</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">convoys</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_cohorts</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s1">&#39;kaplan-meier&#39;</span><span class="p">,</span> <span class="n">groups</span><span class="o">=</span><span class="n">groups</span><span class="p">,</span> <span class="n">plot_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;linestyle&#39;</span><span class="p">:</span> <span class="s1">&#39;--&#39;</span><span class="p">})</span>
+<span class="n">pyplot</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s1">&#39;marriage-combined.png&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This will generate something like this:</p>
+<img alt="_images/marriage-combined.png" src="_images/marriage-combined.png" />
+<p>As you can see, marriage data does not quite follow a generalized Gamma distribution.
+This is not quite shocking, since many complex real world phenomenon are not always possible to model mathematically.
+One reason the model isn’t perfect is there’s an inherent bias in the dataset we use, where it only includes people who are still alive.
+Some resources <a class="reference external" href="http://data.princeton.edu/pop509/ParametricSurvival.pdf">suggest</a> fitting a “Coale-McNeil” model to this instead, which seems like an interesting future addition to Convoys.</p>
+</section>
+</section>
+<section id="motivation">
+<h1>Motivation<a class="headerlink" href="#motivation" title="Link to this heading">¶</a></h1>
+<p>A perfectly valid question is: Convoys really only implements one model: a generalized Gamma distribution multiplied by basically logistic regression. That seems like a very specialized distribution. In order to justify this choice, let’s first look at a handful of conversion charts from real data at <a class="reference external" href="https://better.com">Better</a>:</p>
+<img alt="_images/conversion.gif" class="align-center" src="_images/conversion.gif" />
+<p>The legend, labels of the axes, and title are all removed so that no business secrets are revealed. The solid lines with shaded area are all the generalized Gamma fits, whereas the dashed lines are the Kaplan-Meier fits. Note that the fit is very good! In fact, we have observed that almost any conversion metric can be modeled reasonably well with the generalized Gamma model (multiplied by logistic regression).</p>
+<p>Empirically, this model seems to hold up pretty well.</p>
+<section id="some-more-mathematical-justification">
+<h2>Some more mathematical justification<a class="headerlink" href="#some-more-mathematical-justification" title="Link to this heading">¶</a></h2>
+<p>A simple toy problem also demonstrates why we would expect to get a time-dependent distribution (like the Exponential distribution) multiplied by a logistic function. Consider the <a class="reference external" href="https://en.wikipedia.org/wiki/Markov_chain#Continuous-time_Markov_chain">continuous-time Markov chain</a> with three states: undecided, converted, or died.</p>
+<a class="reference internal image-reference" href="_images/exponential-markov-chain.png"><img alt="_images/exponential-markov-chain.png" class="align-center" src="_images/exponential-markov-chain.png" style="height: 200px;" />
+</a>
+<p>Everyone starts out “undecided” but either converts or dies with rates <span class="math notranslate nohighlight">\(\lambda_{\text{convert}}\)</span> and <span class="math notranslate nohighlight">\(\lambda_{\text{die}}\)</span>. However, we <em>only observe the conversions,</em> not the deaths. At any point in time, we have <span class="math notranslate nohighlight">\(P_{\text{undecided}}(t) + P_{\text{converted}}(t) + P_{\text{dead}}(t) = 1\)</span>.</p>
+<p>The rate of going to undecided to any of the other two states is a constant, meaning at any time interval some fixed proportion of the “undecided” state goes away. Writing out the equations we get an <a class="reference external" href="https://en.wikipedia.org/wiki/Ordinary_differential_equation">ordinary differential equation</a>:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}P'_{\text{converted}}(t) = \lambda_{\text{convert}} P_{\text{undecided}}(t) \\
+P'_{\text{dead}}(t) = \lambda_{\text{die}} P_{\text{undecided}}(t)\end{split}\]</div>
+<p>You can verify that the solution to these equations is the following:</p>
+<div class="math notranslate nohighlight">
+\[P_{\text{converted}}(t) = \frac{\lambda_{\text{convert}}}{\lambda_{\text{convert}} + \lambda_{\text{die}}}\left(1 - \exp(-(\lambda_{\text{convert}} + \lambda_{\text{die}})t)\right)\]</div>
+<p>As you can see, the solution is the product of two things</p>
+<ul class="simple">
+<li><p>The <span class="math notranslate nohighlight">\(1 - \exp(-(\lambda_{\text{convert}} + \lambda_{\text{die}})t)\)</span> part describes the cumulative density function of an exponential distribution.</p></li>
+<li><p>A constant factor <span class="math notranslate nohighlight">\(\lambda_{\text{convert}}/(\lambda_{\text{convert}} + \lambda_{\text{die}})\)</span> describes the final conversion <span class="math notranslate nohighlight">\(P_{\text{converted}}(t \rightarrow \infty)\)</span>.</p></li>
+</ul>
+</section>
+<section id="turning-it-into-a-regression-problem">
+<h2>Turning it into a regression problem<a class="headerlink" href="#turning-it-into-a-regression-problem" title="Link to this heading">¶</a></h2>
+<p>Note that <span class="math notranslate nohighlight">\(\lambda_{\text{convert}}\)</span> and <span class="math notranslate nohighlight">\(\lambda_{\text{die}}\)</span> are positive numbers. For each observation <span class="math notranslate nohighlight">\(z\)</span>, let’s set <span class="math notranslate nohighlight">\(\lambda_{\text{convert}} = \exp(a^Tz)\)</span> and <span class="math notranslate nohighlight">\(\lambda_{\text{die}} = \exp(b^Tz)\)</span> where <span class="math notranslate nohighlight">\(a, b\)</span> are two unknown vectors.</p>
+<p>With this transformation, the probability of conversion becomes</p>
+<div class="math notranslate nohighlight">
+\[P_{\text{converted}}(t \rightarrow \infty) = \frac{1}{1 + \exp(-(a-b)^Tz)}\]</div>
+<p>This is the <a class="reference external" href="https://en.wikipedia.org/wiki/Sigmoid_function">sigmoid function</a>. If you set <span class="math notranslate nohighlight">\(\beta = a - b\)</span> then it turns into ordinary logistic regression where <span class="math notranslate nohighlight">\(\beta\)</span> is the unknown feature weights that we are trying to learn. This shows that the regression method in convoys turns into logistic regression in the limit where <span class="math notranslate nohighlight">\(t \rightarrow \infty\)</span>.</p>
+</section>
+<section id="weibull-gamma-and-generalized-gamma-distributions">
+<h2>Weibull, gamma, and generalized gamma distributions<a class="headerlink" href="#weibull-gamma-and-generalized-gamma-distributions" title="Link to this heading">¶</a></h2>
+<p>Moving on from exponential distributions, there are some good reasons we would want a bit more flexibility with the conversion rates. The <a class="reference external" href="https://en.wikipedia.org/wiki/Weibull_distribution">Weibull distribution</a> adds one single parameter and is widely used in time-to-event analysis. Empirically, the Weibull model seems to fit a large range of applications, where the common pattern is that conversions start immediately at <span class="math notranslate nohighlight">\(t=0\)</span>.</p>
+<p>Another class of processes model the behavior where there might be some internal states between “undecided” and “converted” that causes conversions not to start immediately. The sum of multiple exponential distributions is a <a class="reference external" href="https://en.wikipedia.org/wiki/Gamma_distribution">gamma distribution</a>. It also requires one more parameter than the exponential distribution.</p>
+<a class="reference internal image-reference" href="_images/gamma-markov-chain.png"><img alt="_images/gamma-markov-chain.png" class="align-center" src="_images/gamma-markov-chain.png" style="height: 300px;" />
+</a>
+<p>Finally, the generalized gamma distribution unifies the Weibull and the gamma distribution, and requires two more parameters than the exponential distribution. The relationship between all four distributions can be summarized in this chart:</p>
+<a class="reference internal image-reference" href="_images/probability-distributions.png"><img alt="_images/probability-distributions.png" class="align-center" src="_images/probability-distributions.png" style="height: 150px;" />
+</a>
+</section>
+</section>
+<section id="model">
+<h1>Model<a class="headerlink" href="#model" title="Link to this heading">¶</a></h1>
+<p>Convoys tries to optimize the <a class="reference external" href="https://en.wikipedia.org/wiki/Maximum_a_posteriori_estimation">maximum a posteriori</a> likelihood of observing all the data given the model, optionally also using <a class="reference external" href="https://en.wikipedia.org/wiki/Markov_chain_Monte_Carlo">Markov chain Monte Carlo</a> to sample from the posterior in order to generate uncertainty estimate.</p>
+<p>Let’s say <span class="math notranslate nohighlight">\(f(t, x)\)</span> is a probability density function over time of when a conversion happen, where <span class="math notranslate nohighlight">\(t &gt; 0\)</span> and <span class="math notranslate nohighlight">\(x\)</span> is some feature vector. Note that <span class="math notranslate nohighlight">\(f(t, x)\)</span> denote the probability density of conversion <em>conditional on the conversion happening</em>. This means that <span class="math notranslate nohighlight">\(\int_0^\infty f(t, x) dt = 1\)</span>.</p>
+<p>We use <span class="math notranslate nohighlight">\(F(t, x)\)</span> to denote the cumulative density function of <span class="math notranslate nohighlight">\(f(t, x)\)</span>. The definitions of <span class="math notranslate nohighlight">\(f, F\)</span> depends on which model we use, so we can plug in a Weibull distribution or a Gamma distribution or something else.</p>
+<p>We now introduce <span class="math notranslate nohighlight">\(g(t, x) = c(x)f(t, x)\)</span> and <span class="math notranslate nohighlight">\(G(t, x) = c(x)F(t, x)\)</span> where <span class="math notranslate nohighlight">\(c(x)\)</span> denotes the probability of conversion at all. This means that <span class="math notranslate nohighlight">\(\lim_{t \rightarrow \infty} G(t, x) = c(x)\)</span>.</p>
+<p>For each data point, we have three different cases:</p>
+<ol class="arabic simple">
+<li><p>We observed conversion. In that case, the probability density is <span class="math notranslate nohighlight">\(g(t, x)\)</span></p></li>
+<li><p>We didn’t observe conversion yet and the current time is <span class="math notranslate nohighlight">\(t\)</span>. There are two sub-cases</p>
+<ol class="loweralpha simple">
+<li><p>No conversion will ever happen. The probability density is <span class="math notranslate nohighlight">\(1 - c(x)\)</span>.</p></li>
+<li><p>Conversion will happen at some point in the future. The probability is <span class="math notranslate nohighlight">\(c(x)(1 - F(x, t))\)</span>.</p></li>
+</ol>
+</li>
+</ol>
+<p>Multiplying all these probabilities and taking the logarithm gives the total log-likelihood of the data given the model. See documentation for <code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code> for some more information about the exact math. There is also some regularization that wasn’t covered here.</p>
+</section>
+<section id="module-convoys.plotting">
+<span id="full-api-documentation"></span><h1>Full API documentation<a class="headerlink" href="#module-convoys.plotting" title="Link to this heading">¶</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="convoys.plotting.plot_cohorts">
+<span class="sig-prename descclassname"><span class="pre">convoys.plotting.</span></span><span class="sig-name descname"><span class="pre">plot_cohorts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'kaplan-meier'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'exponential'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'weibull'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'gamma'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'generalized-gamma'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">convoys.multi.MultiModel</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'kaplan-meier'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ci</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Axes'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_ci_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Hashable</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specific_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Hashable</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_fmt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'%(group)s</span> <span class="pre">(n=%(n).0f,</span> <span class="pre">k=%(k).0f)'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">convoys.multi.MultiModel</span></span></span><a class="reference internal" href="_modules/convoys/plotting.html#plot_cohorts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.plotting.plot_cohorts" title="Link to this definition">¶</a></dt>
+<dd><p>Helper function to fit data using a model and then plot the cohorts.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> – list with group assignment</p></li>
+<li><p><strong>B</strong> – list with group assignment</p></li>
+<li><p><strong>T</strong> – list with group assignment</p></li>
+<li><p><strong>t_max</strong> – (optional) max value for x axis</p></li>
+<li><p><strong>model</strong> – (optional, default is kaplan-meier) model to fit.
+Can be an instance of <code class="xref py py-class docutils literal notranslate"><span class="pre">multi.MultiModel</span></code> or a string
+identifying the model. One of ‘kaplan-meier’, ‘exponential’,
+‘weibull’, ‘gamma’, or ‘generalized-gamma’.</p></li>
+<li><p><strong>ci</strong> – confidence interval, value from 0-1, or None (default) if
+no confidence interval is to be plotted</p></li>
+<li><p><strong>ax</strong> – custom pyplot axis to plot on</p></li>
+<li><p><strong>plot_kwargs</strong> – extra arguments to pyplot for the lines</p></li>
+<li><p><strong>plot_ci_kwargs</strong> – extra arguments to pyplot for the confidence
+intervals</p></li>
+<li><p><strong>groups</strong> – list of group labels</p></li>
+<li><p><strong>specific_groups</strong> – subset of groups to plot</p></li>
+<li><p><strong>label_fmt</strong> – custom format for the labels to use in the legend</p></li>
+</ul>
+</dd>
+</dl>
+<p>See  <a class="reference internal" href="#convoys.utils.get_arrays" title="convoys.utils.get_arrays"><code class="xref py py-meth docutils literal notranslate"><span class="pre">convoys.utils.get_arrays()</span></code></a> which is handy for converting
+a Pandas dataframe into arrays <cite>G</cite>, <cite>B</cite>, <cite>T</cite>.</p>
+</dd></dl>
+
+<dl class="py class" id="module-convoys.regression">
+<dt class="sig sig-object py" id="convoys.regression.Exponential">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.regression.</span></span><span class="sig-name descname"><span class="pre">Exponential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/regression.html#Exponential"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.Exponential" title="Link to this definition">¶</a></dt>
+<dd><p>Specialization of <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a> where <span class="math notranslate nohighlight">\(k=1, p=1\)</span>.</p>
+<p>The cumulative density function is:</p>
+<p><span class="math notranslate nohighlight">\(F(t) = 1 - \exp(-t\lambda)\)</span></p>
+<p>The probability density function is:</p>
+<p><span class="math notranslate nohighlight">\(f(t) = \lambda\exp(-t\lambda)\)</span></p>
+<p>The exponential distribution is the most simple distribution.
+From a conversion perspective, you can interpret it as having
+two competing final states where the probability of transitioning
+from the initial state to converted or dead is constant.</p>
+<p>See documentation for <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Exponential.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'ArrayLike'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.regression.Exponential.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – numpy matrix of shape <span class="math notranslate nohighlight">\(k \cdot n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>W</strong> – (optional) numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Exponential.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Exponential.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the value of the cumulative distribution function
+for a fitted model (using the maximum a posteriori estimate).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – feature vector (or matrix)</p></li>
+<li><p><strong>t</strong> – time</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Exponential.predict_ci">
+<span class="sig-name descname"><span class="pre">predict_ci</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ci</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Exponential.predict_ci" title="Link to this definition">¶</a></dt>
+<dd><p>Works like <a class="reference internal" href="#convoys.regression.Exponential.predict" title="convoys.regression.Exponential.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> but produces a confidence interval.</p>
+<p>Requires the model to be fit with <cite>ci = True</cite>. The return value
+will contain one more dimension than for <a class="reference internal" href="#convoys.regression.Exponential.predict" title="convoys.regression.Exponential.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>, and
+the last dimension will have size 3, containing the mean, the
+lower bound of the confidence interval, and the upper bound of
+the confidence interval.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Exponential.predict_posteriori">
+<span class="sig-name descname"><span class="pre">predict_posteriori</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Exponential.predict_posteriori" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the trace samples generated via the MCMC steps.</p>
+<p>Requires the model to be fit with <cite>mcmc == True</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Exponential.rvs">
+<span class="sig-name descname"><span class="pre">rvs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_curves</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#convoys.regression.Exponential.rvs" title="Link to this definition">¶</a></dt>
+<dd><p>Samples values from this distribution</p>
+<p>T is optional and means we already observed non-conversion until T</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.regression.Gamma">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.regression.</span></span><span class="sig-name descname"><span class="pre">Gamma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/regression.html#Gamma"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.Gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Specialization of <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a> where <span class="math notranslate nohighlight">\(p=1\)</span>.</p>
+<p>The cumulative density function is:</p>
+<p><span class="math notranslate nohighlight">\(F(t) = P(k, t\lambda)\)</span></p>
+<p>where <span class="math notranslate nohighlight">\(P(a, x) = \gamma(a, x) / \Gamma(a)\)</span> is the lower regularized
+incomplete gamma function.</p>
+<p>The probability density function is:</p>
+<p><span class="math notranslate nohighlight">\(f(t) = \lambda^k t^{k-1} \exp(-x\lambda) / \Gamma(k)\)</span></p>
+<p>See documentation for <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Gamma.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'ArrayLike'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.regression.Gamma.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – numpy matrix of shape <span class="math notranslate nohighlight">\(k \cdot n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>W</strong> – (optional) numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Gamma.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Gamma.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the value of the cumulative distribution function
+for a fitted model (using the maximum a posteriori estimate).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – feature vector (or matrix)</p></li>
+<li><p><strong>t</strong> – time</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Gamma.predict_ci">
+<span class="sig-name descname"><span class="pre">predict_ci</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ci</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Gamma.predict_ci" title="Link to this definition">¶</a></dt>
+<dd><p>Works like <a class="reference internal" href="#convoys.regression.Gamma.predict" title="convoys.regression.Gamma.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> but produces a confidence interval.</p>
+<p>Requires the model to be fit with <cite>ci = True</cite>. The return value
+will contain one more dimension than for <a class="reference internal" href="#convoys.regression.Gamma.predict" title="convoys.regression.Gamma.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>, and
+the last dimension will have size 3, containing the mean, the
+lower bound of the confidence interval, and the upper bound of
+the confidence interval.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Gamma.predict_posteriori">
+<span class="sig-name descname"><span class="pre">predict_posteriori</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Gamma.predict_posteriori" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the trace samples generated via the MCMC steps.</p>
+<p>Requires the model to be fit with <cite>mcmc == True</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Gamma.rvs">
+<span class="sig-name descname"><span class="pre">rvs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_curves</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#convoys.regression.Gamma.rvs" title="Link to this definition">¶</a></dt>
+<dd><p>Samples values from this distribution</p>
+<p>T is optional and means we already observed non-conversion until T</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.regression.GeneralizedGamma">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.regression.</span></span><span class="sig-name descname"><span class="pre">GeneralizedGamma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mcmc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fix_k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fix_p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hierarchical</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flavor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'logistic'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'linear'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'logistic'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/regression.html#GeneralizedGamma"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.GeneralizedGamma" title="Link to this definition">¶</a></dt>
+<dd><p>Generalization of Gamma, Weibull, and Exponential</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mcmc</strong> – boolean, defaults to False. Whether to use MCMC to
+sample from the posterior so that a confidence interval can be
+estimated later (see <a class="reference internal" href="#convoys.regression.GeneralizedGamma.predict" title="convoys.regression.GeneralizedGamma.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>).</p></li>
+<li><p><strong>hierarchical</strong> – boolean denoting whether we have a (Normal) prior
+on the alpha and beta parameters to regularize. The variance of
+the normal distribution is in itself assumed to be an inverse
+gamma distribution (1, 1).</p></li>
+<li><p><strong>flavor</strong> – defaults to logistic. If set to ‘linear’, then an
+linear model is fit, where the beta params will be completely
+additive. This creates a much more interpretable model, with some
+minor loss of accuracy.</p></li>
+</ul>
+</dd>
+</dl>
+<p>This mostly follows the <a class="reference external" href="https://en.wikipedia.org/wiki/Generalized_gamma_distribution">Wikipedia article</a>, although
+our notation is slightly different. Also see <a class="reference external" href="http://data.princeton.edu/pop509/ParametricSurvival.pdf">this paper</a> for an overview.</p>
+<p><strong>Shape of the probability function</strong></p>
+<p>The cumulative density function is:</p>
+<p><span class="math notranslate nohighlight">\(F(t) = P(k, (t\lambda)^p)\)</span></p>
+<p>where <span class="math notranslate nohighlight">\(P(a, x) = \gamma(a, x) / \Gamma(a)\)</span> is the lower regularized
+incomplete gamma function.
+<span class="math notranslate nohighlight">\(\gamma(a, x)\)</span> is the incomplete gamma function and <span class="math notranslate nohighlight">\(\Gamma(a)\)</span>
+is the standard gamma function.</p>
+<p>The probability density function is:</p>
+<p><span class="math notranslate nohighlight">\(f(t) = p\lambda^{kp} t^{kp-1} \exp(-(t\lambda)^p) / \Gamma(k)\)</span></p>
+<p><strong>Modeling conversion rate</strong></p>
+<p>Since our goal is to model the conversion rate, we assume the conversion
+rate converges to a final value</p>
+<p><span class="math notranslate nohighlight">\(c = \sigma(\mathbf{\beta^Tx} + b)\)</span></p>
+<p>where <span class="math notranslate nohighlight">\(\sigma(z) = 1/(1+e^{-z})\)</span> is the sigmoid function,
+<span class="math notranslate nohighlight">\(\mathbf{\beta}\)</span> is an unknown vector we are solving for (with
+corresponding  intercept <span class="math notranslate nohighlight">\(b\)</span>), and <span class="math notranslate nohighlight">\(\mathbf{x}\)</span> are the
+feature vector (inputs).</p>
+<p>We also assume that the rate parameter <span class="math notranslate nohighlight">\(\lambda\)</span> is determined by</p>
+<p><span class="math notranslate nohighlight">\(\lambda = exp(\mathbf{\alpha^Tx} + a)\)</span></p>
+<p>where <span class="math notranslate nohighlight">\(\mathrm{\alpha}\)</span> is another unknown vector we are
+trying to solve for (with corresponding intercept <span class="math notranslate nohighlight">\(a\)</span>).</p>
+<p>We also assume that the <span class="math notranslate nohighlight">\(\mathbf{\alpha}, \mathbf{\beta}\)</span>
+vectors have a normal distribution</p>
+<p><span class="math notranslate nohighlight">\(\alpha_i \sim \mathcal{N}(0, \sigma_{\alpha})\)</span>,
+<span class="math notranslate nohighlight">\(\beta_i \sim \mathcal{N}(0, \sigma_{\beta})\)</span></p>
+<p>where hyperparameters <span class="math notranslate nohighlight">\(\sigma_{\alpha}^2, \sigma_{\beta}^2\)</span>
+are drawn from an inverse gamma distribution</p>
+<p><span class="math notranslate nohighlight">\(\sigma_{\alpha}^2 \sim \text{inv-gamma}(1, 1)\)</span>,
+<span class="math notranslate nohighlight">\(\sigma_{\beta}^2 \sim \text{inv-gamma}(1, 1)\)</span></p>
+<p><strong>List of parameters</strong></p>
+<p>The full model fits vectors <span class="math notranslate nohighlight">\(\mathbf{\alpha, \beta}\)</span> and scalars
+<span class="math notranslate nohighlight">\(a, b, k, p, \sigma_{\alpha}, \sigma_{\beta}\)</span>.</p>
+<p><strong>Likelihood and censorship</strong></p>
+<p>For entries that convert, the contribution to the likelihood is simply
+the probability density given by the probability distribution function
+<span class="math notranslate nohighlight">\(f(t)\)</span> times the final conversion rate <span class="math notranslate nohighlight">\(c\)</span>.</p>
+<p>For entries that <em>did not</em> convert, there is two options. Either the
+entry will never convert, which has probability <span class="math notranslate nohighlight">\(1-c\)</span>. Or,
+it will convert at some later point that we have not observed yet,
+with probability given by the cumulative density function
+<span class="math notranslate nohighlight">\(F(t)\)</span>.</p>
+<p><strong>Solving the optimization problem</strong></p>
+<p>To find the MAP (max a posteriori), <a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html#scipy.optimize.minimize">scipy.optimize.minimize</a>
+with the SLSQP method.</p>
+<p>If <cite>mcmc == True</cite>, then <a class="reference external" href="http://dfm.io/emcee/current/">emcee</a> is used
+to sample from the full posterior in order to generate uncertainty
+estimates for all parameters.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.GeneralizedGamma.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'ArrayLike'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/convoys/regression.html#GeneralizedGamma.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.GeneralizedGamma.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – numpy matrix of shape <span class="math notranslate nohighlight">\(k \cdot n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>W</strong> – (optional) numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.GeneralizedGamma.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="_modules/convoys/regression.html#GeneralizedGamma.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.GeneralizedGamma.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the value of the cumulative distribution function
+for a fitted model (using the maximum a posteriori estimate).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – feature vector (or matrix)</p></li>
+<li><p><strong>t</strong> – time</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.GeneralizedGamma.predict_ci">
+<span class="sig-name descname"><span class="pre">predict_ci</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ci</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="_modules/convoys/regression.html#GeneralizedGamma.predict_ci"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.GeneralizedGamma.predict_ci" title="Link to this definition">¶</a></dt>
+<dd><p>Works like <a class="reference internal" href="#convoys.regression.GeneralizedGamma.predict" title="convoys.regression.GeneralizedGamma.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> but produces a confidence interval.</p>
+<p>Requires the model to be fit with <cite>ci = True</cite>. The return value
+will contain one more dimension than for <a class="reference internal" href="#convoys.regression.GeneralizedGamma.predict" title="convoys.regression.GeneralizedGamma.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>, and
+the last dimension will have size 3, containing the mean, the
+lower bound of the confidence interval, and the upper bound of
+the confidence interval.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.GeneralizedGamma.predict_posteriori">
+<span class="sig-name descname"><span class="pre">predict_posteriori</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="_modules/convoys/regression.html#GeneralizedGamma.predict_posteriori"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.GeneralizedGamma.predict_posteriori" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the trace samples generated via the MCMC steps.</p>
+<p>Requires the model to be fit with <cite>mcmc == True</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.GeneralizedGamma.rvs">
+<span class="sig-name descname"><span class="pre">rvs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_curves</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/convoys/regression.html#GeneralizedGamma.rvs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.GeneralizedGamma.rvs" title="Link to this definition">¶</a></dt>
+<dd><p>Samples values from this distribution</p>
+<p>T is optional and means we already observed non-conversion until T</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.regression.Weibull">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.regression.</span></span><span class="sig-name descname"><span class="pre">Weibull</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/regression.html#Weibull"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.regression.Weibull" title="Link to this definition">¶</a></dt>
+<dd><p>Specialization of <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a> where <span class="math notranslate nohighlight">\(k=1\)</span>.</p>
+<p>The cumulative density function is:</p>
+<p><span class="math notranslate nohighlight">\(F(t) = 1 - \exp(-(t\lambda)^p)\)</span></p>
+<p>The probability density function is:</p>
+<p><span class="math notranslate nohighlight">\(f(t) = p\lambda(t\lambda)^{p-1}\exp(-(t\lambda)^p)\)</span></p>
+<p>See documentation for <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Weibull.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'ArrayLike'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.regression.Weibull.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – numpy matrix of shape <span class="math notranslate nohighlight">\(k \cdot n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>W</strong> – (optional) numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Weibull.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Weibull.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the value of the cumulative distribution function
+for a fitted model (using the maximum a posteriori estimate).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – feature vector (or matrix)</p></li>
+<li><p><strong>t</strong> – time</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Weibull.predict_ci">
+<span class="sig-name descname"><span class="pre">predict_ci</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ci</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Weibull.predict_ci" title="Link to this definition">¶</a></dt>
+<dd><p>Works like <a class="reference internal" href="#convoys.regression.Weibull.predict" title="convoys.regression.Weibull.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> but produces a confidence interval.</p>
+<p>Requires the model to be fit with <cite>ci = True</cite>. The return value
+will contain one more dimension than for <a class="reference internal" href="#convoys.regression.Weibull.predict" title="convoys.regression.Weibull.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>, and
+the last dimension will have size 3, containing the mean, the
+lower bound of the confidence interval, and the upper bound of
+the confidence interval.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Weibull.predict_posteriori">
+<span class="sig-name descname"><span class="pre">predict_posteriori</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#convoys.regression.Weibull.predict_posteriori" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the trace samples generated via the MCMC steps.</p>
+<p>Requires the model to be fit with <cite>mcmc == True</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.regression.Weibull.rvs">
+<span class="sig-name descname"><span class="pre">rvs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_curves</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#convoys.regression.Weibull.rvs" title="Link to this definition">¶</a></dt>
+<dd><p>Samples values from this distribution</p>
+<p>T is optional and means we already observed non-conversion until T</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-convoys.single">
+<dt class="sig sig-object py" id="convoys.single.KaplanMeier">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.single.</span></span><span class="sig-name descname"><span class="pre">KaplanMeier</span></span><a class="reference internal" href="_modules/convoys/single.html#KaplanMeier"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.single.KaplanMeier" title="Link to this definition">¶</a></dt>
+<dd><p>Implementation of the Kaplan-Meier nonparametric method.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.single.KaplanMeier.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/convoys/single.html#KaplanMeier.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.single.KaplanMeier.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.single.KaplanMeier.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="_modules/convoys/single.html#KaplanMeier.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.single.KaplanMeier.predict" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the predicted values.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.single.KaplanMeier.predict_ci">
+<span class="sig-name descname"><span class="pre">predict_ci</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ci</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="_modules/convoys/single.html#KaplanMeier.predict_ci"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.single.KaplanMeier.predict_ci" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the predicted values with a confidence interval.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-convoys.multi">
+<dt class="sig sig-object py" id="convoys.multi.Exponential">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.multi.</span></span><span class="sig-name descname"><span class="pre">Exponential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/multi.html#Exponential"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.multi.Exponential" title="Link to this definition">¶</a></dt>
+<dd><p>Multi-group version of <a class="reference internal" href="#convoys.regression.Exponential" title="convoys.regression.Exponential"><code class="xref py py-class docutils literal notranslate"><span class="pre">convoys.regression.Exponential</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.multi.Exponential.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.multi.Exponential.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.multi.Gamma">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.multi.</span></span><span class="sig-name descname"><span class="pre">Gamma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/multi.html#Gamma"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.multi.Gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Multi-group version of <a class="reference internal" href="#convoys.regression.Gamma" title="convoys.regression.Gamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">convoys.regression.Gamma</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.multi.Gamma.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.multi.Gamma.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.multi.GeneralizedGamma">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.multi.</span></span><span class="sig-name descname"><span class="pre">GeneralizedGamma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/multi.html#GeneralizedGamma"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.multi.GeneralizedGamma" title="Link to this definition">¶</a></dt>
+<dd><p>Multi-group version of <a class="reference internal" href="#convoys.regression.GeneralizedGamma" title="convoys.regression.GeneralizedGamma"><code class="xref py py-class docutils literal notranslate"><span class="pre">convoys.regression.GeneralizedGamma</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.multi.GeneralizedGamma.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.multi.GeneralizedGamma.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.multi.KaplanMeier">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.multi.</span></span><span class="sig-name descname"><span class="pre">KaplanMeier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/multi.html#KaplanMeier"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.multi.KaplanMeier" title="Link to this definition">¶</a></dt>
+<dd><p>Multi-group version of <a class="reference internal" href="#convoys.single.KaplanMeier" title="convoys.single.KaplanMeier"><code class="xref py py-class docutils literal notranslate"><span class="pre">convoys.single.KaplanMeier</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.multi.KaplanMeier.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.multi.KaplanMeier.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="convoys.multi.Weibull">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">convoys.multi.</span></span><span class="sig-name descname"><span class="pre">Weibull</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/convoys/multi.html#Weibull"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.multi.Weibull" title="Link to this definition">¶</a></dt>
+<dd><p>Multi-group version of <a class="reference internal" href="#convoys.regression.Weibull" title="convoys.regression.Weibull"><code class="xref py py-class docutils literal notranslate"><span class="pre">convoys.regression.Weibull</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="convoys.multi.Weibull.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">T</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#convoys.multi.Weibull.fit" title="Link to this definition">¶</a></dt>
+<dd><p>Fits the model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>B</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+<li><p><strong>T</strong> – numpy vector of shape <span class="math notranslate nohighlight">\(n\)</span></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function" id="module-convoys.utils">
+<dt class="sig sig-object py" id="convoys.utils.get_arrays">
+<span class="sig-prename descclassname"><span class="pre">convoys.utils.</span></span><span class="sig-name descname"><span class="pre">get_arrays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pandas.DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">created</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">converted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">now</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Unit'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_min_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'Unit'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Hashable</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/convoys/utils.html#get_arrays"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#convoys.utils.get_arrays" title="Link to this definition">¶</a></dt>
+<dd><p>Converts a dataframe to a list of numpy arrays.</p>
+<p>Generates either feature data, or group data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> – Pandas dataframe</p></li>
+<li><p><strong>features</strong> – string (optional), refers to a column in the dataframe
+containing features, each being a 1d-vector or list of features.
+If not provided, then it it will look for a column in the dataframe
+named “features”. This argument can also be a list of columns.</p></li>
+<li><p><strong>groups</strong> – string (optional), refers to a column in the dataframe
+containing the groups for each row. If not provided, then it will
+look for a column in the dataframe named “groups”.</p></li>
+<li><p><strong>created</strong> – string (optional), refers to a column in the dataframe
+containing timestamps of when each item was “created”. If not
+provided, then it will look for a column in the dataframe named
+“created”.</p></li>
+<li><p><strong>converted</strong> – string, refers to a column in the dataframe
+containing timestamps of when each item converted. If there is no
+column containing creation values, then the converted values should
+be timedeltas denoting time until conversion. If this argument is
+not provided, then it will look for a column in the dataframe named
+“created”.</p></li>
+<li><p><strong>now</strong> – string (optional), refers to a column in the dataframe
+containing the point in time up until which we have observed
+non-conversion. If there is no column containing creation value,
+then these values should be timedeltas. If this argument is not
+provided, the current timestamp will be used.</p></li>
+<li><p><strong>unit</strong> – string (optional), time unit to use when converting to
+numerical values. Has to be one of “years”, “days”, “hours”,
+“minutes”, or “seconds”. If not provided, then a choice will be
+made based on the largest time interval in the inputs.</p></li>
+<li><p><strong>group_min_size</strong> – integer (optional), only include groups that
+has at least this many observations</p></li>
+<li><p><strong>max_groups</strong> – integer (optional), only include the <cite>n</cite> largest
+groups</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p>tuple (unit, groups, arrays)</p>
+<p><cite>unit</cite> is the unit chosen. Will be one of “years”, “days”, “hours”,
+“minutes”, or “seconds”. If the <cite>unit</cite> parameter is passed, this
+will be the same.</p>
+<dl class="simple">
+<dt><cite>groups</cite> is a list of strings containing the groups. Will be <cite>None</cite></dt><dd><p>if <cite>groups</cite> is not set.</p>
+</dd>
+</dl>
+<p><cite>arrays</cite> is a tuple of numpy arrays <cite>(G, B, T)</cite> or <cite>(X, B, T)</cite>
+containing the transformed input in numerical format. <cite>G</cite>, <cite>B</cite>, <cite>T</cite>
+will all be 1D numpy arrays. <cite>X</cite> will be a 2D numpy array.</p>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="future-work">
+<h1>Future work<a class="headerlink" href="#future-work" title="Link to this heading">¶</a></h1>
+<ul class="simple">
+<li><p>Add support for a competing hazard model. This would make it possible to analyze a dataset where there’s multiple final outcomes.</p></li>
+<li><p>Add support for left-censoring. This would make it possible to analyze some great datasets such as <a class="reference external" href="https://github.com/washingtonpost/data-homicides">Washington Posts unsolved homicide dataset</a> where we don’t know <em>when</em> a murder was dispositioned.</p></li>
+<li><p>Add support for multi-stage processes where there’s a number of “milestones” that depend on each other.</p></li>
+<li><p>Add support for some kind of recurrent neural network or similar where the features can vary over time.</p></li>
+</ul>
+</section>
+<section id="license">
+<h1>License<a class="headerlink" href="#license" title="Link to this heading">¶</a></h1>
+<p>Convoys uses the MIT license.</p>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">Convoys</a></h1>
+
+
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=better&repo=convoys&type=star&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+    
+
+<p>
+<a class="badge" href="https://travis-ci.org/better/convoys">
+    <img
+        alt="https://secure.travis-ci.org/better/convoys.svg?branch=master"
+        src="https://secure.travis-ci.org/better/convoys.svg?branch=master"
+    />
+</a>
+</p>
+
+
+
+  <div>
+    <h3><a href="#">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Convoys</a><ul>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#background">Background</a></li>
+<li><a class="reference internal" href="#survival-analysis-saves-the-day">Survival analysis saves the day</a></li>
+<li><a class="reference internal" href="#predicting-lagged-conversions">Predicting lagged conversions</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#examples">Examples</a><ul>
+<li><a class="reference internal" href="#example-1-nyc-department-of-buildings-violations">Example 1: NYC Department of Buildings violations</a></li>
+<li><a class="reference internal" href="#example-2-age-of-marriage">Example 2: Age of marriage</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#motivation">Motivation</a><ul>
+<li><a class="reference internal" href="#some-more-mathematical-justification">Some more mathematical justification</a></li>
+<li><a class="reference internal" href="#turning-it-into-a-regression-problem">Turning it into a regression problem</a></li>
+<li><a class="reference internal" href="#weibull-gamma-and-generalized-gamma-distributions">Weibull, gamma, and generalized gamma distributions</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#model">Model</a></li>
+<li><a class="reference internal" href="#module-convoys.plotting">Full API documentation</a><ul>
+<li><a class="reference internal" href="#convoys.plotting.plot_cohorts"><code class="docutils literal notranslate"><span class="pre">plot_cohorts()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Exponential"><code class="docutils literal notranslate"><span class="pre">Exponential</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.regression.Exponential.fit"><code class="docutils literal notranslate"><span class="pre">Exponential.fit()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Exponential.predict"><code class="docutils literal notranslate"><span class="pre">Exponential.predict()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Exponential.predict_ci"><code class="docutils literal notranslate"><span class="pre">Exponential.predict_ci()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Exponential.predict_posteriori"><code class="docutils literal notranslate"><span class="pre">Exponential.predict_posteriori()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Exponential.rvs"><code class="docutils literal notranslate"><span class="pre">Exponential.rvs()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.regression.Gamma"><code class="docutils literal notranslate"><span class="pre">Gamma</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.regression.Gamma.fit"><code class="docutils literal notranslate"><span class="pre">Gamma.fit()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Gamma.predict"><code class="docutils literal notranslate"><span class="pre">Gamma.predict()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Gamma.predict_ci"><code class="docutils literal notranslate"><span class="pre">Gamma.predict_ci()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Gamma.predict_posteriori"><code class="docutils literal notranslate"><span class="pre">Gamma.predict_posteriori()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Gamma.rvs"><code class="docutils literal notranslate"><span class="pre">Gamma.rvs()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.regression.GeneralizedGamma"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.regression.GeneralizedGamma.fit"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma.fit()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.GeneralizedGamma.predict"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma.predict()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.GeneralizedGamma.predict_ci"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma.predict_ci()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.GeneralizedGamma.predict_posteriori"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma.predict_posteriori()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.GeneralizedGamma.rvs"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma.rvs()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.regression.Weibull"><code class="docutils literal notranslate"><span class="pre">Weibull</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.regression.Weibull.fit"><code class="docutils literal notranslate"><span class="pre">Weibull.fit()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Weibull.predict"><code class="docutils literal notranslate"><span class="pre">Weibull.predict()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Weibull.predict_ci"><code class="docutils literal notranslate"><span class="pre">Weibull.predict_ci()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Weibull.predict_posteriori"><code class="docutils literal notranslate"><span class="pre">Weibull.predict_posteriori()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.regression.Weibull.rvs"><code class="docutils literal notranslate"><span class="pre">Weibull.rvs()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.single.KaplanMeier"><code class="docutils literal notranslate"><span class="pre">KaplanMeier</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.single.KaplanMeier.fit"><code class="docutils literal notranslate"><span class="pre">KaplanMeier.fit()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.single.KaplanMeier.predict"><code class="docutils literal notranslate"><span class="pre">KaplanMeier.predict()</span></code></a></li>
+<li><a class="reference internal" href="#convoys.single.KaplanMeier.predict_ci"><code class="docutils literal notranslate"><span class="pre">KaplanMeier.predict_ci()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.multi.Exponential"><code class="docutils literal notranslate"><span class="pre">Exponential</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.multi.Exponential.fit"><code class="docutils literal notranslate"><span class="pre">Exponential.fit()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.multi.Gamma"><code class="docutils literal notranslate"><span class="pre">Gamma</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.multi.Gamma.fit"><code class="docutils literal notranslate"><span class="pre">Gamma.fit()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.multi.GeneralizedGamma"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.multi.GeneralizedGamma.fit"><code class="docutils literal notranslate"><span class="pre">GeneralizedGamma.fit()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.multi.KaplanMeier"><code class="docutils literal notranslate"><span class="pre">KaplanMeier</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.multi.KaplanMeier.fit"><code class="docutils literal notranslate"><span class="pre">KaplanMeier.fit()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.multi.Weibull"><code class="docutils literal notranslate"><span class="pre">Weibull</span></code></a><ul>
+<li><a class="reference internal" href="#convoys.multi.Weibull.fit"><code class="docutils literal notranslate"><span class="pre">Weibull.fit()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#convoys.utils.get_arrays"><code class="docutils literal notranslate"><span class="pre">get_arrays()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#future-work">Future work</a></li>
+<li><a class="reference internal" href="#license">License</a></li>
+</ul>
+
+  </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2018, Erik Bernhardsson.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+    <script>
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-64912988-4']);
+      _gaq.push(['_setDomainName', 'none']);
+      _gaq.push(['_setAllowLinker', true]);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'https://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    
+  </body>
+</html>

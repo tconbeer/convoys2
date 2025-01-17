@@ -3,6 +3,7 @@ from matplotlib import pyplot
 
 import convoys.plotting
 import convoys.utils
+from pathlib import Path
 
 
 def run() -> None:
@@ -22,7 +23,8 @@ def run() -> None:
     convoys.plotting.plot_cohorts(
         G, B, T, model="kaplan-meier", groups=groups, plot_kwargs={"linestyle": "--"}
     )
-    pyplot.savefig("marriage-combined.png")
+    fig_path = Path(__file__).parent / "marriage-combined.png"
+    pyplot.savefig(fig_path)
 
 
 if __name__ == "__main__":
