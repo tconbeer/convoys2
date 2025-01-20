@@ -6,12 +6,18 @@ Convoys is a simple library that fits a few statistical model useful for modelin
 Installation
 ------------
 
-The easiest way to install is from GitHub:
+You can install from PyPI using any compatible tool (pip, uv, poetry, etc.):
+
 
 ::
 
-    pip install https://github.com/tconbeer/convoys2.git@main
+    pip install convoys2
 
+You can then import the package using the name `convoys`:
+
+::
+
+    import convoys
 
 Background
 ----------
