@@ -1,7 +1,9 @@
 .mypy_cache
+.pytest_cache
 .ruff_cache
 .venv
 __pycache__
 
+docs/_build
 tests/results
 examples/**/*.png

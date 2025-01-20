@@ -1,8 +1,4 @@
-[![Travis status](https://img.shields.io/travis/better/convoys/master.svg?style=flat)](https://travis-ci.org/better/convoys)
-[![Coverage Status](https://img.shields.io/coveralls/better/convoys/master.svg?style=flat)](https://coveralls.io/github/better/convoys?branch=master)
-[![PyPI version](https://img.shields.io/pypi/v/convoys.svg?style=flat)](https://pypi.org/project/convoys/)
-
-Convoys
+Convoys2
 =======
 
 ![pic](docs/images/dob-violations-combined.png)
@@ -14,13 +10,21 @@ You can also take a look at [this blog post](https://better.engineering/2019/07/
 Installation
 ------------
 
-The easiest way right now is to install the latest version from PyPI:
+The easiest way right now is to install from this repo:
 
+```bash
+pip install https://github.com/tconbeer/convoys2.git@main
 ```
-pip install convoys
+
+You can then import the package using the name `convoys`:
+
+```py
+import convoys
 ```
 
 More info
 ---------
 
-Convoys was built by [Erik Bernhardsson](https://github.com/erikbern) and has the MIT license.
+Convoys was built by [Erik Bernhardsson](https://github.com/erikbern) and has the MIT license. The original repo lives [here](https://github.com/better/convoys).
+
+In 2025, it was updated for breaking changes caused by Numpy 2.0 and other dependencies by [Ted Conbeer](https://tedconbeer.com).

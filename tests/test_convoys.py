@@ -1,7 +1,7 @@
 import datetime
 import random
-from typing import Literal
 from pathlib import Path
+from typing import Literal
 
 import flaky
 import matplotlib
@@ -18,7 +18,6 @@ import convoys.plotting
 import convoys.regression
 import convoys.single
 import convoys.utils
-
 
 
 def sample_weibull(k: float, lambd: float) -> float:
@@ -444,22 +443,26 @@ def test_plot_cohorts_subplots() -> None:
         convoys.plotting.plot_cohorts(G, B, T, groups=groups, ax=ax)
         ax.legend()
     here = Path(__file__)
-    matplotlib.pyplot.savefig(here.parent/"results"/"subplots.png")
+    results_dir = here.parent / "results"
+    results_dir.mkdir(exist_ok=True)
+    matplotlib.pyplot.savefig(results_dir / "subplots.png")
+
 
 @pytest.fixture
 def add_examples_to_path() -> None:
     import sys
+
     root = Path(__file__).parent.parent
-    sys.path.append(str(root/"examples"))
+    sys.path.append(str(root))
 
 
 def test_marriage_example(add_examples_to_path: None) -> None:
-    from marriage import run
+    from examples.marriage import run
 
     run()
 
 
 def test_dob_violations_example(add_examples_to_path: None) -> None:
-    from dob_violations import run
+    from examples.dob_violations import run
 
     run()

@@ -1,8 +1,8 @@
 import datetime
+from pathlib import Path
 
 import pandas
 from matplotlib import pyplot
-from pathlib import Path
 
 import convoys.plotting
 import convoys.utils

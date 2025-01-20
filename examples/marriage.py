@@ -1,9 +1,10 @@
+from pathlib import Path
+
 import pandas
 from matplotlib import pyplot
 
 import convoys.plotting
 import convoys.utils
-from pathlib import Path
 
 
 def run() -> None:

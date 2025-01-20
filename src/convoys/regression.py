@@ -1,23 +1,29 @@
 from __future__ import annotations
+
 import warnings
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
-import autograd  # type: ignore[import-untyped]
 import emcee  # type: ignore[import-untyped]
 import numpy
 import progressbar
 import scipy.optimize  # type: ignore[import-untyped]
-from autograd.numpy import (  # type: ignore[import-untyped]
-    dot,
-    exp,
-    isnan,
-    log,
-    sum,  # noqa: A004
-)
-from autograd.scipy.special import expit, gammaln  # type: ignore[import-untyped]
-from autograd_gamma import gammainc  # type: ignore[import-untyped]
 from scipy.special import gammaincinv  # type: ignore[import-untyped]
+
+with warnings.catch_warnings():
+    # we have pinned numpy and SciPy, so we can ignore the deprecation warnings
+    # issued by autograd 1.7
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    import autograd  # type: ignore[import-untyped]
+    from autograd.numpy import (  # type: ignore[import-untyped]
+        dot,
+        exp,
+        isnan,
+        log,
+        sum,  # noqa: A004
+    )
+    from autograd.scipy.special import expit, gammaln  # type: ignore[import-untyped]
+    from autograd_gamma import gammainc  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -352,7 +358,9 @@ class GeneralizedGamma(RegressionModel):
             )
             for i, _ in enumerate(sampler.sample(p0, iterations=n_iterations)):
                 bar.update(i + 1)
-            result["samples"] = sampler.chain[:, n_burnin:, :].reshape((-1, dim)).T
+            result["samples"] = (
+                sampler.get_chain()[n_burnin:, :, :].reshape(-1, dim, order="F").T
+            )
             if self._fix_k:
                 result["samples"][0, :] = log(self._fix_k)
             if self._fix_p:

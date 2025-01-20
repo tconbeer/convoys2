@@ -9,15 +9,14 @@ authors = [
 ]
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    'autograd',
+    'autograd>=1.7.0',
     'autograd-gamma>=0.2.0',
-    'deprecated',
+    'numpy>=2.0.0,<3', # autograd 1.7 will break with v3
+    'scipy>=1.15.0,<2', # autograd 1.7 will break with v2
     'emcee>=3.0.0',
     'matplotlib>=2.0.0',
     'pandas>=0.24.0',
     'progressbar2>=3.46.1',
-    'numpy',
-    'scipy',
 ]
 [dependency-groups]
 dev = [
@@ -51,7 +50,7 @@ files = [
     "tests/**/*.py",
     "examples/**/*.py",
 ]
-mypy_path = "stubs"
+mypy_path = "stubs,examples"
 
 show_column_numbers = true
 
