@@ -10,10 +10,10 @@ You can also take a look at [this blog post](https://better.engineering/2019/07/
 Installation
 ------------
 
-The easiest way right now is to install from this repo:
+You can install from PyPI using any compatible tool (pip, uv, poetry, etc.):
 
 ```bash
-pip install https://github.com/tconbeer/convoys2.git@main
+pip install convoys2
 ```
 
 You can then import the package using the name `convoys`:
