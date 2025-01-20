@@ -12,4 +12,4 @@ lint:
 	uv run mypy
 
 docs:
-	uv run --only-group docs sphinx-build -M html docs/ docs/_build/ -W
+	uv run --group docs --all-packages sphinx-build -M html docs/ docs/_build/ -W

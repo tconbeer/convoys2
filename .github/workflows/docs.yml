@@ -26,7 +26,7 @@ jobs:
 
       - name: Sphinx build
         run: |
-          uv run --only-group docs sphinx-build -M html docs/ docs/_build/ -W
+          uv run --group docs sphinx-build -M html docs/ docs/_build/ -W
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
