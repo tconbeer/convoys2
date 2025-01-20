@@ -1,17 +1,16 @@
-Convoys
-=======
+Convoys2
+========
 
-Convoys is a simple library that fits a few statistical model useful for modeling time-lagged conversion rates.
-You can check out the `Github repo <https://github.com/better/convoys>`_ for source code and more things!
+Convoys is a simple library that fits a few statistical model useful for modeling time-lagged conversion rates. It was originally created by Erik Bernhardsson in 2018, and forked by Ted Conbeer in 2025.
 
 Installation
 ------------
 
-The easiest way to install is from PyPI:
+The easiest way to install is from GitHub:
 
 ::
 
-    pip install convoys
+    pip install https://github.com/tconbeer/convoys2.git@main
 
 
 Background

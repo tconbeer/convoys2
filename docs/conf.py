@@ -89,12 +89,10 @@ html_theme = "alabaster"
 # documentation.
 #
 html_theme_options = {
-    "analytics_id": "UA-64912988-4",
-    "github_user": "better",
-    "github_repo": "convoys",
+    "github_user": "tconbeer",
+    "github_repo": "convoys2",
     "github_button": True,
     "github_type": "star",
-    "travis_button": True,
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

@@ -135,6 +135,10 @@ class GeneralizedGamma(RegressionModel):
     :param mcmc: boolean, defaults to False. Whether to use MCMC to
         sample from the posterior so that a confidence interval can be
         estimated later (see :meth:`predict`).
+    :param fix_k: int or None. If an int, fixes :math:`k` to that value.
+        For example, use `fix_k=1` for a Weibull distribution.
+    :param fix_p: int or None. If an int, fixes :math:`p` to that value.
+        Use `fix_p=1` for a Gamma distribution.
     :param hierarchical: boolean denoting whether we have a (Normal) prior
         on the alpha and beta parameters to regularize. The variance of
         the normal distribution is in itself assumed to be an inverse
@@ -487,9 +491,15 @@ class Exponential(GeneralizedGamma):
 
     See documentation for :class:`GeneralizedGamma`."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.update(dict(fix_k=1, fix_p=1))
-        super(Exponential, self).__init__(*args, **kwargs)
+    def __init__(
+        self,
+        mcmc: bool = False,
+        hierarchical: bool = True,
+        flavor: Literal["logistic", "linear"] = "logistic",
+    ) -> None:
+        super().__init__(
+            mcmc=mcmc, hierarchical=hierarchical, flavor=flavor, fix_p=1, fix_k=1
+        )
 
 
 class Weibull(GeneralizedGamma):
@@ -505,9 +515,15 @@ class Weibull(GeneralizedGamma):
 
     See documentation for :class:`GeneralizedGamma`."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.update(dict(fix_k=1))
-        super(Weibull, self).__init__(*args, **kwargs)
+    def __init__(
+        self,
+        mcmc: bool = False,
+        hierarchical: bool = True,
+        flavor: Literal["logistic", "linear"] = "logistic",
+    ) -> None:
+        super().__init__(
+            mcmc=mcmc, hierarchical=hierarchical, flavor=flavor, fix_k=1, fix_p=None
+        )
 
 
 class Gamma(GeneralizedGamma):
@@ -526,6 +542,12 @@ class Gamma(GeneralizedGamma):
 
     See documentation for :class:`GeneralizedGamma`."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.update(dict(fix_p=1))
-        super(Gamma, self).__init__(*args, **kwargs)
+    def __init__(
+        self,
+        mcmc: bool = False,
+        hierarchical: bool = True,
+        flavor: Literal["logistic", "linear"] = "logistic",
+    ) -> None:
+        super().__init__(
+            mcmc=mcmc, hierarchical=hierarchical, flavor=flavor, fix_p=1, fix_k=None
+        )
