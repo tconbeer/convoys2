@@ -1,0 +1,51 @@
+name: Build and Publish Package
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  publish-package:
+    if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v') }}
+    runs-on: ubuntu-latest
+    environment: publish
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.21"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Get version from branch name
+        id: package_version
+        run: echo "package_version=${GITHUB_HEAD_REF:9}" >> $GITHUB_OUTPUT
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create a Github Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.package_version.outputs.package_version }}
+          target_commitish: main
+          token: ${{ secrets.RELEASE_TOKEN }}
+          body_path: CHANGELOG.md
+          files: |
+            LICENSE
+            dist/*.whl
+            dist/*.tar.gz

@@ -4,6 +4,7 @@
 .venv
 __pycache__
 
+dist
 docs/_build
 tests/results
 examples/**/*.png

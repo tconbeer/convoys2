@@ -1,0 +1,63 @@
+name: Create Release Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      newVersion:
+        description: A version number for this release (e.g., "0.1.0")
+        required: true
+
+jobs:  
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.21"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Create release branch
+        run: |
+          git checkout -b release/v${{ github.event.inputs.newVersion }}
+          git push --set-upstream origin release/v${{ github.event.inputs.newVersion }}
+
+      - name: Bump version
+        run: uvx --from=toml-cli toml set --toml-path=pyproject.toml project.version ${{ github.event.inputs.newVersion }}
+
+      - name: Ensure package can be built
+        run: uv build
+
+      - name: Update CHANGELOG
+        uses: thomaseizinger/keep-a-changelog-new-release@v3
+        with:
+          version: ${{ github.event.inputs.newVersion }}
+
+      - name: Commit Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Bumps version to ${{ github.event.inputs.newVersion }}
+
+      - name: Create pull request into main
+        uses: thomaseizinger/create-pull-request@1.4.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          head: release/v${{ github.event.inputs.newVersion }}
+          base: main
+          title: v${{ github.event.inputs.newVersion }}
+          body: >
+            This PR was automatically generated. It bumps the version number
+            in pyproject.toml and updates CHANGELOG.md. You may have to close
+            this PR and reopen it to get the required checks to run.
+
