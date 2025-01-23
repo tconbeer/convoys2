@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- Adds the `convoys.export` module, which includes the `export_cohorts` function. `export_cohorts`
+  samples from the model predictions to create a DataFrame that can be easily inserted into a
+  database table and plotted with a BI tool.
+
 ## [0.3.0] - 2025-01-20
 
 ### Breaking Changes
