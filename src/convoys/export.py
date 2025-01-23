@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Hashable, Literal
+from math import floor
+from typing import TYPE_CHECKING, Callable, Hashable, Literal
 
 import numpy
-from matplotlib import pyplot
+import pandas
 
 import convoys.multi
 
 if TYPE_CHECKING:
-    from matplotlib.axes import Axes
+    pass
 
-__all__ = ["plot_cohorts"]
+__all__ = ["export_cohorts"]
 
 
 _models: dict[str, Callable[[bool], convoys.multi.MultiModel]] = {
@@ -22,7 +23,7 @@ _models: dict[str, Callable[[bool], convoys.multi.MultiModel]] = {
 }
 
 
-def plot_cohorts(
+def export_cohorts(
     G: numpy.ndarray,
     B: numpy.ndarray,
     T: numpy.ndarray,
@@ -32,21 +33,22 @@ def plot_cohorts(
     ]
     | convoys.multi.MultiModel = "kaplan-meier",
     ci: float | None = None,
-    ax: "Axes" | None = None,
-    plot_kwargs: dict[str, Any] | None = None,
-    plot_ci_kwargs: dict[str, Any] | None = None,
     groups: list[Hashable] | None = None,
     specific_groups: list[Hashable] | None = None,
-    label_fmt: str = "%(group)s (n=%(n).0f, k=%(k).0f)",
-) -> convoys.multi.MultiModel:
-    """Helper function to fit data using a model and then plot the cohorts.
+) -> pandas.DataFrame:
+    """Helper function to fit data using a model and then
+    export the model predictions as a DataFrame. The Dataframe will
+    have the columns "group", "t", and "prediction_value"; if ci is not None,
+    it will also have the columns "ci_low" and "ci_high". "t" will be integers
+    in the range from 0 to t_max (or max(T) if t_max is None). This
+    format enables easy storage in a database and plotting with BI tools.
 
     :param G: numpy array of shape :math:`n`, containing integers representing group
         assignments.
     :param B: numpy array of shape :math:`n`, containing booleans representing
-        whether or not the subject 'converted' at time t.
+        whether or not the subject 'converted' at time delta :math:`t`.
     :param T: numpy array of shape :math:`n`, containing floats representing the
-        time delta between creation and either conversion or censoring.
+        time delta :math:`t` between creation and either conversion or censoring.
     :param t_max: (optional) max value for x axis
     :param model: (optional, default is kaplan-meier) model to fit.
         Can be an instance of :class:`multi.MultiModel` or a string
@@ -54,13 +56,8 @@ def plot_cohorts(
         'weibull', 'gamma', or 'generalized-gamma'.
     :param ci: confidence interval, value from 0-1, or None (default) if
         no confidence interval is to be plotted
-    :param ax: custom pyplot axis to plot on
-    :param plot_kwargs: extra arguments to pyplot for the lines
-    :param plot_ci_kwargs: extra arguments to pyplot for the confidence
-        intervals
     :param groups: list of group labels
     :param specific_groups: subset of groups to plot
-    :param label_fmt: custom format for the labels to use in the legend
 
     See  :meth:`convoys.utils.get_arrays` which is handy for converting
     a Pandas dataframe into arrays `G`, `B`, `T`.
@@ -73,13 +70,9 @@ def plot_cohorts(
     if groups is None:
         groups = list(set(G))
 
-    if ax is None:
-        ax = pyplot.gca()
-
     # Set x scale
     if t_max is None:
-        _, t_max = ax.get_xlim()
-        t_max = max(t_max, max(T))
+        t_max = max(T)
     if not isinstance(model, convoys.multi.MultiModel):
         # Fit model
         m = _models[model](bool(ci))
@@ -93,42 +86,24 @@ def plot_cohorts(
     if len(set(specific_groups).intersection(groups)) != len(specific_groups):
         raise ValueError("specific_groups not a subset of groups!")
 
-    # Plot
-    t = numpy.linspace(0, t_max, 1000)  # type: ignore[arg-type]
-    _, y_max = ax.get_ylim()
-    # Reset to first color
-    ax.set_prop_cycle(None)  # type:ignore[call-overload]
+    RESULT_LENGTH = floor(t_max + 1)
+    t = numpy.arange(RESULT_LENGTH)
+    data: list[pandas.DataFrame] = []
+
     for group in specific_groups:
         j = groups.index(group)  # matching index of group
 
-        n = numpy.sum(G == j)
-        k = numpy.sum(B[G == j])
-        label = label_fmt % dict(group=group, n=n, k=k)
-
         if ci is not None:
-            p_y, p_y_lo, p_y_hi = m.predict_ci(j, t, ci=ci).T
-            merged_plot_ci_kwargs = {"alpha": 0.2}
-            if plot_ci_kwargs is not None:
-                merged_plot_ci_kwargs.update(plot_ci_kwargs)
-            p = ax.fill_between(
-                t,
-                100.0 * p_y_lo,
-                100.0 * p_y_hi,
-                **merged_plot_ci_kwargs,  # type: ignore[arg-type]
+            result = m.predict_ci(j, t, ci=ci)
+            result_df = pandas.DataFrame(
+                data=result, columns=["prediction_value", "ci_low", "ci_high"]
             )
-            color = p.get_facecolor()[0]  # reuse color for the line
         else:
-            p_y = m.predict(j, t).T
-            color = None
+            result = m.predict(j, t)
+            result_df = pandas.DataFrame(data=result, columns=["prediction_value"])
+        result_df["t"] = t
+        result_df["group"] = group
+        data.append(result_df)
 
-        merged_plot_kwargs = {"color": color, "linewidth": 1.5, "alpha": 0.7}
-        if plot_kwargs is not None:
-            merged_plot_kwargs.update(plot_kwargs)
-        ax.plot(t, 100.0 * p_y, label=label, **merged_plot_kwargs)  # type: ignore[arg-type]
-        y_max = max(y_max, 110.0 * max(p_y))
-
-    ax.set_xlim(0, t_max)
-    ax.set_ylim(0, y_max)
-    ax.set_ylabel("Conversion rate %")
-    ax.grid(True)
-    return m
+    unioned_data = pandas.concat(data)
+    return unioned_data

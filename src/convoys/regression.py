@@ -151,7 +151,7 @@ class GeneralizedGamma(RegressionModel):
     This mostly follows the `Wikipedia article
     <https://en.wikipedia.org/wiki/Generalized_gamma_distribution>`_, although
     our notation is slightly different. Also see `this paper
-    <http://data.princeton.edu/pop509/ParametricSurvival.pdf>`_ for an overview.
+    <https://grodri.github.io/survival/pop509slides1.pdf>`_ for an overview.
 
     **Shape of the probability function**
 
@@ -210,7 +210,7 @@ class GeneralizedGamma(RegressionModel):
     the probability density given by the probability distribution function
     :math:`f(t)` times the final conversion rate :math:`c`.
 
-    For entries that *did not* convert, there is two options. Either the
+    For entries that *did not* convert, there are two options. Either the
     entry will never convert, which has probability :math:`1-c`. Or,
     it will convert at some later point that we have not observed yet,
     with probability given by the cumulative density function
@@ -250,10 +250,16 @@ class GeneralizedGamma(RegressionModel):
     ) -> None:
         """Fits the model.
 
-        :param X: numpy matrix of shape :math:`k \\cdot n`
-        :param B: numpy vector of shape :math:`n`
-        :param T: numpy vector of shape :math:`n`
-        :param W: (optional) numpy vector of shape :math:`n`
+        :param X: numpy 2-D array of shape :math:`k \\cdot n`, containing floats
+            or ints representing the values of 1 or more features. Can be used
+            with 1-hot encoding to represent group membership.
+        :param B: numpy array of shape :math:`n`, containing booleans representing
+            whether or not the subject 'converted' at time delta :math:`t`.
+        :param T: numpy array of shape :math:`n`, containing floats representing the
+            time delta :math:`t` between creation and either conversion or censoring.
+        :param W: (optional) numpy vector of shape :math:`n`, containing floats
+            representing weights (or counts) for the row's observation(s). If None,
+            defaults to `numpy.ones(len(X))`.
         """
 
         if W is None:
@@ -390,6 +396,8 @@ class GeneralizedGamma(RegressionModel):
             c = expit(dot(x, params["beta"].T) + params["b"])
         elif self._flavor == "linear":
             c = dot(x, params["beta"].T) + params["b"]
+        else:
+            raise ValueError("flavor must be one of `logistic` or `linear`")
         M = c * gammainc(params["k"], (t * lambd) ** params["p"])
 
         return M  # type: ignore[no-any-return]

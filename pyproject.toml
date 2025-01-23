@@ -50,7 +50,7 @@ files = [
     "tests/**/*.py",
     "examples/**/*.py",
 ]
-mypy_path = "stubs,examples"
+mypy_path = "stubs,examples,tests"
 
 show_column_numbers = true
 
