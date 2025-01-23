@@ -93,10 +93,10 @@ def get_arrays(
     Generates either feature data, or group data.
 
     :param data: Pandas dataframe
-    :param features: string (optional), refers to a column in the dataframe
-        containing features, each being a 1d-vector or list of features.
-        If not provided, then it it will look for a column in the dataframe
-        named "features". This argument can also be a list of columns.
+    :param features: string or Sequence[str] (optional), refers to a column
+        in the dataframe containing features, each being a 1d-vector or list
+        of features. If not provided, then it it will look for a column in the
+        dataframe named "features". This argument can also be a list of columns.
     :param groups: string (optional), refers to a column in the dataframe
         containing the groups for each row. If not provided, then it will
         look for a column in the dataframe named "groups".
@@ -159,6 +159,9 @@ def get_arrays(
         groups_list = None
         if isinstance(features, tuple):
             features = list(features)  # Otherwise sad Panda
+        # this creates an array of shape (n, k), whether features is a
+        # single Series containing tuples of length k, or features is a
+        # list of columns of length k.
         X = numpy.array([numpy.array(z) for z in data[features].values])
         retval = X
 

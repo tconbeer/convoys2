@@ -1,7 +1,7 @@
 import datetime
 import random
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import flaky
 import matplotlib
@@ -19,20 +19,8 @@ import convoys.regression
 import convoys.single
 import convoys.utils
 
-
-def sample_weibull(k: float, lambd: float) -> float:
-    # scipy.stats is garbage for this
-    # exp(-(x * lambda)^k) = y
-    base: numpy.float64 = -numpy.log(random.random())
-    return base ** (1.0 / k) / lambd
-
-
-def generate_censored_data(
-    N: numpy.ndarray, E: numpy.ndarray, C: numpy.ndarray
-) -> tuple[numpy.ndarray, numpy.ndarray]:
-    B = numpy.array([c and e < n for n, e, c in zip(N, E, C, strict=False)])
-    T = numpy.array([e if b else n for e, b, n in zip(E, B, N, strict=False)])
-    return B, T
+if TYPE_CHECKING:
+    from tests.conftest import Utilities
 
 
 def test_kaplan_meier_model() -> None:
@@ -56,13 +44,17 @@ def test_kaplan_meier_model() -> None:
 
 
 def test_output_shapes(
-    c: float = 0.3, lambd: float = 0.1, n: int = 1000, k: int = 5
+    utilities: "Utilities",
+    c: float = 0.3,
+    lambd: float = 0.1,
+    n: int = 1000,
+    k: int = 5,
 ) -> None:
     X = numpy.random.randn(n, k)
     C = scipy.stats.bernoulli.rvs(c, size=(n,))
     N = scipy.stats.uniform.rvs(scale=5.0 / lambd, size=(n,))
     E = scipy.stats.expon.rvs(scale=1.0 / lambd, size=(n,))
-    B, T = generate_censored_data(N, E, C)
+    B, T = utilities.generate_censored_data(N, E, C)
 
     # Fit model with ci
     model = convoys.regression.Exponential(mcmc=True)
@@ -93,7 +85,7 @@ def test_output_shapes(
 
 @flaky.flaky
 def test_exponential_regression_model(
-    c: float = 0.3, lambd: float = 0.1, n: int = 10000
+    utilities: "Utilities", c: float = 0.3, lambd: float = 0.1, n: int = 10000
 ) -> None:
     X = numpy.ones((n, 1))
     C: numpy.ndarray = scipy.stats.bernoulli.rvs(c, size=(n,))  # did it convert
@@ -101,7 +93,7 @@ def test_exponential_regression_model(
     E: numpy.ndarray = scipy.stats.expon.rvs(
         scale=1.0 / lambd, size=(n,)
     )  # time of event
-    B, T = generate_censored_data(N, E, C)
+    B, T = utilities.generate_censored_data(N, E, C)
     model = convoys.regression.Exponential(mcmc=True)
     model.fit(X, B, T)
     assert 0.80 * c < model.predict([1], float("inf")) < 1.30 * c
@@ -135,6 +127,7 @@ def test_exponential_regression_model(
 
 @flaky.flaky
 def test_weibull_regression_model(
+    utilities: "Utilities",
     cs: tuple[float, float, float] = (0.3, 0.5, 0.7),
     lambd: float = 0.1,
     k: float = 0.5,
@@ -143,8 +136,8 @@ def test_weibull_regression_model(
     X = numpy.array([[r % len(cs) == j for j in range(len(cs))] for r in range(n)])
     C = numpy.array([bool(random.random() < cs[r % len(cs)]) for r in range(n)])
     N = scipy.stats.uniform.rvs(scale=5.0 / lambd, size=(n,))
-    E = numpy.array([sample_weibull(k, lambd) for r in range(n)])
-    B, T = generate_censored_data(N, E, C)
+    E = numpy.array([utilities.sample_weibull(k, lambd) for r in range(n)])
+    B, T = utilities.generate_censored_data(N, E, C)
 
     model = convoys.regression.Weibull()
     model.fit(X, B, T)
@@ -170,14 +163,18 @@ def test_weibull_regression_model(
 
 @flaky.flaky
 def test_gamma_regression_model(
-    c: float = 0.3, lambd: float = 0.1, k: float = 3.0, n: int = 10000
+    utilities: "Utilities",
+    c: float = 0.3,
+    lambd: float = 0.1,
+    k: float = 3.0,
+    n: int = 10000,
 ) -> None:
     # TODO: this one seems very sensitive to large values for N (i.e. less censoring)
     X = numpy.ones((n, 1))
     C = scipy.stats.bernoulli.rvs(c, size=(n,))
     N = scipy.stats.uniform.rvs(scale=20.0 / lambd, size=(n,))
     E = scipy.stats.gamma.rvs(a=k, scale=1.0 / lambd, size=(n,))
-    B, T = generate_censored_data(N, E, C)
+    B, T = utilities.generate_censored_data(N, E, C)
 
     model = convoys.regression.Gamma()
     model.fit(X, B, T)
@@ -193,7 +190,11 @@ def test_gamma_regression_model(
 
 @flaky.flaky
 def test_linear_model(
-    n: int = 10000, m: int = 5, k: float = 3.0, lambd: float = 0.1
+    utilities: "Utilities",
+    n: int = 10000,
+    m: int = 5,
+    k: float = 3.0,
+    lambd: float = 0.1,
 ) -> None:
     # Generate data with little censoring
     # The coefficients should be quite close to their actual value
@@ -201,8 +202,8 @@ def test_linear_model(
     X = numpy.random.binomial(n=1, p=0.5, size=(n, m))
     C = numpy.random.rand(n) < numpy.dot(X, cs.T)
     N = scipy.stats.uniform.rvs(scale=20.0 / lambd, size=(n,))
-    E = numpy.array([sample_weibull(k, lambd) for r in range(n)])
-    B, T = generate_censored_data(N, E, C)
+    E = numpy.array([utilities.sample_weibull(k, lambd) for r in range(n)])
+    B, T = utilities.generate_censored_data(N, E, C)
 
     model = convoys.regression.Weibull(mcmc=False, flavor="linear")
     model.fit(X, B, T)
@@ -228,6 +229,7 @@ def test_linear_model(
 
 @flaky.flaky
 def test_exponential_pooling(
+    utilities: "Utilities",
     c: "ArrayLike" = 0.5,
     lambd: float = 0.01,
     n: int = 10000,
@@ -247,7 +249,7 @@ def test_exponential_pooling(
     C[:n] = scipy.stats.bernoulli.rvs(c, size=(n,))
     N[:] = 1000.0
     E[:n] = scipy.stats.expon.rvs(scale=1.0 / lambd, size=(n,))
-    B, T = generate_censored_data(N, E, C)
+    B, T = utilities.generate_censored_data(N, E, C)
 
     # Fit model
     model = convoys.multi.Exponential()
@@ -260,59 +262,36 @@ def test_exponential_pooling(
     assert numpy.all(numpy.diff(c) < 0)  # c should be monotonically decreasing
 
 
-def _generate_dataframe(
-    cs: tuple[float, ...] = (0.3, 0.5, 0.7),
-    k: float = 0.5,
-    lambd: float = 0.1,
-    n: int = 1000,
-) -> pandas.DataFrame:
-    groups = [r % len(cs) for r in range(n)]
-    C = numpy.array([bool(random.random() < cs[g]) for g in groups])
-    N = scipy.stats.expon.rvs(scale=10.0 / lambd, size=(n,))
-    E = numpy.array([sample_weibull(k, lambd) for r in range(n)])
-    B, T = generate_censored_data(N, E, C)
-
-    def x2t(x: int) -> datetime.datetime:
-        return datetime.datetime(2000, 1, 1) + datetime.timedelta(days=x)
-
-    return pandas.DataFrame(
-        data=dict(
-            group=["Group %d" % g for g in groups],
-            created=[x2t(0) for g in groups],
-            converted=[x2t(t) if b else None for t, b in zip(T, B, strict=False)],
-            now=[x2t(n) for n in N],
-        )
-    )
-
-
-def test_convert_dataframe(n: int = 1000) -> None:
-    df = _generate_dataframe(n=n)
+def test_convert_dataframe(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     unit, groups, (G, B, T) = convoys.utils.get_arrays(df)
-    assert G.shape == B.shape == T.shape == (n,)
+    assert G.shape == B.shape == T.shape == (len(df),)
 
 
-def test_convert_dataframe_features(n: int = 1000) -> None:
-    df = _generate_dataframe(n=n)
+def test_convert_dataframe_features(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     df["features"] = [
         tuple(numpy.random.randn() for z in range(3)) for g in df["group"]
     ]
     df = df.drop("group", axis=1)
     unit, groups, (X, B, T) = convoys.utils.get_arrays(df)
-    assert X.shape == (n, 3)
+    assert X.shape == (len(df), 3)
 
+
+def test_convert_dataframe_features_multi_cols(weibull_df: pandas.DataFrame) -> None:
     # Generate from multiple columns
-    df = _generate_dataframe(n=n)
+    df = weibull_df
     df["feature_1"] = [numpy.random.randn() for g in df["group"]]
     df["feature_2"] = [numpy.random.randn() for g in df["group"]]
     df = df.drop("group", axis=1)
     unit, groups, (X, B, T) = convoys.utils.get_arrays(
         df, features=("feature_1", "feature_2")
     )
-    assert X.shape == (n, 2)
+    assert X.shape == (len(df), 2)
 
 
-def test_convert_dataframe_infer_now() -> None:
-    df = _generate_dataframe()
+def test_convert_dataframe_infer_now(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     df = df.drop("now", axis=1)
 
     unit, groups, (G1, B1, T1) = convoys.utils.get_arrays(df, unit="days")
@@ -338,8 +317,8 @@ def test_convert_dataframe_infer_now() -> None:
         assert 0 <= t3 - t1 < 3.0 / (24 * 60 * 60)
 
 
-def test_convert_dataframe_timedeltas() -> None:
-    df = _generate_dataframe()
+def test_convert_dataframe_timedeltas(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
 
     unit, groups, (G1, B1, T1) = convoys.utils.get_arrays(df, unit="days")
     df2 = pandas.DataFrame(
@@ -355,8 +334,8 @@ def test_convert_dataframe_timedeltas() -> None:
         assert 0 <= t2 - t1 < 3.0 / (24 * 60 * 60)
 
 
-def test_convert_dataframe_more_args() -> None:
-    df = _generate_dataframe()
+def test_convert_dataframe_more_args(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     unit, groups, (G, B, T) = convoys.utils.get_arrays(df, max_groups=2)
     assert groups is not None
     assert len(groups) <= 2
@@ -364,8 +343,8 @@ def test_convert_dataframe_more_args() -> None:
     assert G.shape == (0,)
 
 
-def test_convert_dataframe_created_at_nan(n: int = 1000) -> None:
-    df = _generate_dataframe(n=n)
+def test_convert_dataframe_created_at_nan(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     df.loc[df.index[0], "created"] = None
     unit, groups, (G, B, T) = convoys.utils.get_arrays(df)
     assert numpy.issubdtype(G.dtype, numpy.integer)
@@ -373,16 +352,27 @@ def test_convert_dataframe_created_at_nan(n: int = 1000) -> None:
     assert numpy.issubdtype(T.dtype, numpy.number)
 
 
-def _test_plot_cohorts(
+@pytest.mark.parametrize(
+    "model,extra_model",
+    [
+        ("kaplan-meier", None),
+        ("weibull", None),
+        ("exponential", None),
+        ("kaplan-meier", "weibull"),
+    ],
+)
+@flaky.flaky
+def test_plot_cohorts(
     model: Literal[
         "kaplan-meier", "exponential", "weibull", "gamma", "generalized-gamma"
-    ] = "weibull",
+    ],
     extra_model: Literal[
         "kaplan-meier", "exponential", "weibull", "gamma", "generalized-gamma"
     ]
-    | None = None,
+    | None,
+    weibull_df: pandas.DataFrame,
 ) -> None:
-    df = _generate_dataframe()
+    df = weibull_df
     unit, groups, (G, B, T) = convoys.utils.get_arrays(df)
     matplotlib.pyplot.clf()
     convoys.plotting.plot_cohorts(G, B, T, model=model, ci=0.95, groups=groups)
@@ -392,50 +382,35 @@ def _test_plot_cohorts(
             G, B, T, model=extra_model, plot_kwargs=dict(linestyle="--", alpha=0.1)
         )
     here = Path(__file__)
-    results_dir = here.parent / "results"
-    results_dir.mkdir(exist_ok=True)
+    snapshots_dir = here.parent / "snapshots"
+    snapshots_dir.mkdir(exist_ok=True)
     matplotlib.pyplot.savefig(
-        results_dir / f"{model}-{extra_model}.png"
+        snapshots_dir / f"{model}-{extra_model}.png"
         if extra_model is not None
-        else results_dir / f"{model}.png"
+        else snapshots_dir / f"{model}.png"
     )
 
 
-def test_plot_cohorts_model() -> None:
-    df = _generate_dataframe()
+def test_plot_cohorts_bad_model_raises(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     unit, groups, (G, B, T) = convoys.utils.get_arrays(df)
-    model = convoys.multi.Exponential(mcmc=None)
-    model.fit(G, B, T)
-    matplotlib.pyplot.clf()
-    convoys.plotting.plot_cohorts(G, B, T, model=model, groups=groups)
-    matplotlib.pyplot.legend()
 
     with pytest.raises(ValueError):
         convoys.plotting.plot_cohorts(G, B, T, model="bad", groups=groups)  # type: ignore[arg-type]
 
+
+def test_plot_cohorts_bad_groups_raises(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
+    unit, groups, (G, B, T) = convoys.utils.get_arrays(df)
+
     with pytest.raises(ValueError):
         convoys.plotting.plot_cohorts(
-            G, B, T, model=model, groups=groups, specific_groups=["Nonsense"]
+            G, B, T, model="kaplan-meier", groups=groups, specific_groups=["Nonsense"]
         )
 
 
-@flaky.flaky
-def test_plot_cohorts_kaplan_meier() -> None:
-    _test_plot_cohorts(model="kaplan-meier")
-
-
-@flaky.flaky
-def test_plot_cohorts_weibull() -> None:
-    _test_plot_cohorts(model="weibull")
-
-
-@flaky.flaky
-def test_plot_cohorts_two_models() -> None:
-    _test_plot_cohorts(model="kaplan-meier", extra_model="weibull")
-
-
-def test_plot_cohorts_subplots() -> None:
-    df = _generate_dataframe()
+def test_plot_cohorts_subplots(weibull_df: pandas.DataFrame) -> None:
+    df = weibull_df
     unit, groups, (G, B, T) = convoys.utils.get_arrays(df)
     matplotlib.pyplot.clf()
     fix, axes = matplotlib.pyplot.subplots(nrows=2, ncols=2)
@@ -443,9 +418,9 @@ def test_plot_cohorts_subplots() -> None:
         convoys.plotting.plot_cohorts(G, B, T, groups=groups, ax=ax)
         ax.legend()
     here = Path(__file__)
-    results_dir = here.parent / "results"
-    results_dir.mkdir(exist_ok=True)
-    matplotlib.pyplot.savefig(results_dir / "subplots.png")
+    snapshots_dir = here.parent / "snapshots"
+    snapshots_dir.mkdir(exist_ok=True)
+    matplotlib.pyplot.savefig(snapshots_dir / "subplots.png")
 
 
 @pytest.fixture

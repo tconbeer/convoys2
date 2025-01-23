@@ -31,8 +31,10 @@ class KaplanMeier(SingleModel):
     def fit(self, B: "ArrayLike", T: "ArrayLike") -> None:
         """Fits the model
 
-        :param B: numpy vector of shape :math:`n`
-        :param T: numpy vector of shape :math:`n`
+        :param B: numpy array of shape :math:`n`, containing booleans representing
+            whether or not the subject 'converted' at time delta :math:`t`.
+        :param T: numpy array of shape :math:`n`, containing floats representing the
+            time delta :math:`t` between creation and either conversion or censoring.
         """
         if not isinstance(B, numpy.ndarray):
             B = numpy.array(B)

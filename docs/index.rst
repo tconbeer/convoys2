@@ -12,6 +12,9 @@ Full API documentation
 .. automodule:: convoys.plotting
    :members:
 
+.. automodule:: convoys.export
+   :members:
+
 .. automodule:: convoys.regression
    :members:
    :inherited-members:

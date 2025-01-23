@@ -39,9 +39,12 @@ class RegressionToMulti(MultiModel["ArrayLike"]):
     def fit(self, G: "ArrayLike", B: "ArrayLike", T: "ArrayLike") -> None:
         """Fits the model
 
-        :param G: numpy vector of shape :math:`n`
-        :param B: numpy vector of shape :math:`n`
-        :param T: numpy vector of shape :math:`n`
+        :param G: numpy array of shape :math:`n`, containing integers representing group
+            assignments.
+        :param B: numpy array of shape :math:`n`, containing booleans representing
+            whether or not the subject 'converted' at time delta :math:`t`.
+        :param T: numpy array of shape :math:`n`, containing floats representing the
+            time delta :math:`t` between creation and either conversion or censoring.
         """
         G = numpy.array(G, dtype=int)
         (n,) = G.shape
@@ -80,9 +83,12 @@ class SingleToMulti(MultiModel[Hashable]):
     def fit(self, G: "ArrayLike", B: "ArrayLike", T: "ArrayLike") -> None:
         """Fits the model
 
-        :param G: numpy vector of shape :math:`n`
-        :param B: numpy vector of shape :math:`n`
-        :param T: numpy vector of shape :math:`n`
+        :param G: numpy array of shape :math:`n`, containing integers representing group
+            assignments.
+        :param B: numpy array of shape :math:`n`, containing booleans representing
+            whether or not the subject 'converted' at time delta :math:`t`.
+        :param T: numpy array of shape :math:`n`, containing floats representing the
+            time delta :math:`t` between creation and either conversion or censoring.
         """
         G = numpy.array(G)
         B = numpy.array(B)
