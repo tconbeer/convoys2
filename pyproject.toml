@@ -1,6 +1,6 @@
 [project]
 name = "convoys2"
-version = "0.3.0"
+version = "0.4.0"
 description = "Implementation of statistical models to analyze time lagged conversions"
 readme = "README.md"
 authors = [
